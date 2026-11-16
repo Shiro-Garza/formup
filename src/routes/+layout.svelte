@@ -3,6 +3,9 @@
 	import '#lib/base.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import { auth, initAuth } from '#lib/auth.svelte.js';
 
 	let { children } = $props();
 
@@ -11,6 +14,17 @@
 		{ href: '/log', label: 'Log' },
 		{ href: '/progress', label: 'Progress' }
 	];
+
+	onMount(initAuth);
+
+	const onLogin = $derived(page.url.pathname === '/login');
+
+	// Route guard: signed-out users go to /login, signed-in users skip it.
+	$effect(() => {
+		if (!auth.ready) return;
+		if (!auth.user && !onLogin) goto('/login');
+		else if (auth.user && onLogin) goto('/');
+	});
 </script>
 
 <svelte:head>
@@ -18,25 +32,29 @@
 	<title>FormUp</title>
 </svelte:head>
 
-<div class="shell">
-	<main class="content">
-		{@render children()}
-	</main>
+{#if auth.ready && (auth.user || onLogin)}
+	<div class="shell">
+		<main class="content">
+			{@render children()}
+		</main>
 
-	<nav class="tabbar" aria-label="Main">
-		<div class="tabs">
-			{#each tabs as tab}
-				<a
-					class="tab"
-					href={tab.href}
-					aria-current={page.url.pathname === tab.href ? 'page' : undefined}
-				>
-					{tab.label}
-				</a>
-			{/each}
-		</div>
-	</nav>
-</div>
+		{#if auth.user}
+			<nav class="tabbar" aria-label="Main">
+				<div class="tabs">
+					{#each tabs as tab}
+						<a
+							class="tab"
+							href={tab.href}
+							aria-current={page.url.pathname === tab.href ? 'page' : undefined}
+						>
+							{tab.label}
+						</a>
+					{/each}
+				</div>
+			</nav>
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.shell {

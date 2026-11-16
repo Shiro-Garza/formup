@@ -1,4 +1,8 @@
-<h1>Home</h1>
+<script>
+	import { auth, logOut } from '#lib/auth.svelte.js';
+</script>
+
+<h1>Hi, {auth.user?.name}</h1>
 
 <section class="card">
 	<p class="muted">Today's PT</p>
@@ -10,3 +14,13 @@
 	<p class="muted">Progress toward target</p>
 	<p class="stat">0%</p>
 </section>
+
+<button class="btn secondary" onclick={logOut}>Log out</button>
+
+<style>
+	.secondary {
+		background: transparent;
+		border: 1px solid var(--color-border);
+		color: var(--color-text);
+	}
+</style>
