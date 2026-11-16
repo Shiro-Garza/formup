@@ -3,7 +3,7 @@
 	import LoginModal from '#lib/LoginModal.svelte';
 
 	//login script
-	let { form } = $props();
+	let { form, data } = $props();
   	let showLoginModal = $state(false);
 
 	//time tracking algorithm 
@@ -35,7 +35,7 @@
 <LoginModal bind:open={showLoginModal} {form} />
 
 <section class="welcome-title">
-	<h1>Good {greeting}</h1>
+	<h1>Good {greeting}{data.username ? `, ${data.username}` : ''}</h1>
 	<p>Current Time: {hours}:{minutes}:{seconds}</p>
 </section>
 <h1>Home</h1>
