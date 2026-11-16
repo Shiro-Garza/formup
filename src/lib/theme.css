@@ -1,0 +1,66 @@
+/*
+  FormUp theme: the single place to change styling.
+  Colors, fonts, corner radius, spacing, and layout breakpoints
+  are all defined as CSS variables below. Components only use these variables.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+	/* Color */
+	--color-bg: #0b1f3a;
+	--color-card: #14304f;
+	--color-accent: #ffb020;
+	--color-positive: #3dd68c;
+	--color-text: #eaf0f7;
+	--color-text-muted: #9fb3c8;
+	--color-on-accent: #0b1f3a;
+	--color-border: rgba(159, 179, 200, 0.18);
+
+	/* Type */
+	--font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+	--font-body: 'Inter', system-ui, sans-serif;
+
+	/* Shape */
+	--radius-card: 16px;
+	--radius-control: 12px;
+	--radius-pill: 999px;
+
+	/* Spacing */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 28px;
+	--gutter: 20px;
+	--touch-target: 44px;
+
+	/* Layout */
+	--content-max: 520px;
+	--tabbar-height: 64px;
+}
+
+/* Light mode: swap the same variables */
+:root[data-theme='light'] {
+	--color-bg: #eaf0f7;
+	--color-card: #ffffff;
+	--color-text: #0b1f3a;
+	--color-text-muted: #4a6078;
+	--color-border: rgba(11, 31, 58, 0.12);
+}
+
+/* Layout scale: wider screens get a wider content column and a larger gutter */
+@media (min-width: 768px) {
+	:root {
+		--content-max: 720px;
+		--gutter: 32px;
+	}
+}
+
+@media (min-width: 1100px) {
+	:root {
+		--content-max: 960px;
+		--gutter: 40px;
+	}
+}
