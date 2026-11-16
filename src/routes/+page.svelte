@@ -13,7 +13,9 @@
 	const minutes = $derived(String(time.getMinutes()).padStart(2, '0'));
 	const seconds = $derived(String(time.getSeconds()).padStart(2, '0'));
 	//if statement for moring afternoon evening on main page
-	let greeting = parseInt(hours, 10) < 12 ? 'Morning' : parseInt(hours, 10) < 18 ? 'Afternoon' : 'Evening';
+	const greeting = $derived(
+		parseInt(hours, 10) < 12 ? 'Morning' : parseInt(hours, 10) < 18 ? 'Afternoon' : 'Evening'
+	);
 
 	onMount(() => {
 		const interval = setInterval(() => {

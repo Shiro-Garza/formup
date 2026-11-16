@@ -69,67 +69,76 @@
 <style>
   dialog {
     padding: 0;
-    border: none;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    background: var(--color-card);
+    color: var(--color-text);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
     max-width: 380px;
     width: 90%;
-    font-family: system-ui, sans-serif;
   }
 
   dialog::backdrop {
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(2px);
   }
 
   .modal-content {
-    padding: 2rem;
+    padding: var(--space-6);
     position: relative;
   }
 
   .close-btn {
     position: absolute;
-    top: 12px;
-    right: 14px;
+    top: var(--space-2);
+    right: var(--space-3);
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
     background: none;
     border: none;
     font-size: 1.5rem;
-    cursor: pointer;
-    color: #64748b;
+    color: var(--color-text-muted);
   }
 
   h2 {
-    margin-top: 0;
-    font-size: 1.5rem;
+    margin-bottom: var(--space-4);
   }
 
   .field {
-    margin-bottom: 1rem;
+    margin-bottom: var(--space-4);
   }
 
   label {
     display: block;
-    margin-bottom: 0.4rem;
+    margin-bottom: var(--space-2);
     font-weight: 500;
   }
 
   input {
     width: 100%;
-    padding: 0.6rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    box-sizing: border-box;
+    min-height: var(--touch-target);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  input:focus-visible,
+  .close-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .submit-btn {
     width: 100%;
-    padding: 0.75rem;
-    background-color: #ff3e00;
-    color: white;
+    min-height: var(--touch-target);
+    background: var(--color-accent);
+    color: var(--color-on-accent);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-control);
     font-weight: 600;
-    cursor: pointer;
   }
 
   .submit-btn:disabled {
@@ -138,11 +147,11 @@
   }
 
   .error {
-    background-color: #fee2e2;
-    color: #b91c1c;
-    padding: 0.75rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
+    background: rgba(255, 90, 90, 0.15);
+    color: #ff8a8a;
+    padding: var(--space-3);
+    border-radius: var(--radius-control);
+    margin-bottom: var(--space-4);
     font-size: 0.9rem;
   }
 </style>
