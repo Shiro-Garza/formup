@@ -5,8 +5,8 @@
 
 	const W = 320;
 	const H = 190;
-	const PL = 12;
-	const PR = 12;
+	const PL = 32;
+	const PR = 32;
 	const PT = 22;
 	const PB = 28;
 
