@@ -3,8 +3,12 @@
 	import '#lib/base.css';
 	import favicon from '#lib/assets/favicon.svg';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
+	import { store } from '#lib/store.svelte.js';
 
 	let { children } = $props();
+
+	onMount(() => store.init());
 
 	const tabs = [
 		{ href: '/', label: 'Home' },
