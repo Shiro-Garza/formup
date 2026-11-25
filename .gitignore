@@ -12,6 +12,9 @@ node_modules
 .DS_Store
 Thumbs.db
 
+# Local app data (sessions, scores)
+/data
+
 # Env
 .env
 .env.*

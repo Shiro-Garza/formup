@@ -6,15 +6,16 @@
 	import { onMount } from 'svelte';
 	import { store } from '#lib/store.svelte.js';
 
-	let { children } = $props();
+	let { children, data } = $props();
 
 	onMount(() => store.init());
 
-	const tabs = [
+	const tabs = $derived([
 		{ href: '/', label: 'Home' },
 		{ href: '/log', label: 'Log' },
-		{ href: '/progress', label: 'Progress' }
-	];
+		{ href: '/progress', label: 'Progress' },
+		...(data.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin' }] : [])
+	]);
 </script>
 
 <svelte:head>
@@ -28,7 +29,7 @@
 	</main>
 
 	<nav class="tabbar" aria-label="Main">
-		<div class="tabs">
+		<div class="tabs" style="grid-template-columns: repeat({tabs.length}, 1fr)">
 			{#each tabs as tab}
 				<a
 					class="tab"

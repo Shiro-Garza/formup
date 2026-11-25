@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import { enhance } from '$app/forms';
 	import LoginModal from '#lib/LoginModal.svelte';
 	import { store } from '#lib/store.svelte.js';
 	import {
@@ -35,16 +36,20 @@
 		return () => clearInterval(interval);
 	});
 
-	const session = $derived(nextSession(time));
+	const session = $derived(nextSession(data.sessions, time));
 	const attended = $derived(session ? store.isAttended(session.key) : false);
 	const progress = $derived(Math.min(100, (store.composite / store.target) * 100));
 </script>
 
 <header class="row">
 	<h2 class="brand">FormUp</h2>
-	<button class="btn ghost" onclick={() => (showLoginModal = true)}>
-		{data.username ? 'Switch user' : 'Log In'}
-	</button>
+	{#if data.user}
+		<form method="POST" action="?/logout" use:enhance>
+			<button class="btn ghost">Log out</button>
+		</form>
+	{:else}
+		<button class="btn ghost" onclick={() => (showLoginModal = true)}>Log In</button>
+	{/if}
 </header>
 
 <LoginModal bind:open={showLoginModal} {form} />

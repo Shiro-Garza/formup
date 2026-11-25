@@ -103,17 +103,14 @@ export function workoutValue(w) {
 }
 
 // Next scheduled PT session at or after `now` (a session stays "current" for 2 hours).
-export function nextSession(now = new Date()) {
+// `sessions` are admin-scheduled: { id, date: 'YYYY-MM-DD', time: 'HH:MM', title, detail }.
+export function nextSession(sessions, now = new Date()) {
 	let best = null;
-	for (let offset = 0; offset <= 7; offset++) {
-		const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
-		for (const s of SCHEDULE) {
-			if (s.day !== day.getDay()) continue;
-			const [h, m] = s.time.split(':').map(Number);
-			const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m);
-			if (start.getTime() < now.getTime() - 2 * 3600 * 1000) continue;
-			if (!best || start < best.start) best = { ...s, start, key: `${todayISO(start)}-${s.time}` };
-		}
+	for (const s of sessions) {
+		const start = new Date(`${s.date}T${s.time}:00`);
+		if (Number.isNaN(start.getTime())) continue;
+		if (start.getTime() < now.getTime() - 2 * 3600 * 1000) continue;
+		if (!best || start < best.start) best = { ...s, start, key: s.id };
 	}
 	return best;
 }
