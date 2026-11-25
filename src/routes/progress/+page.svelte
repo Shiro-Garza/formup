@@ -11,6 +11,8 @@
 		todayISO
 	} from '#lib/events.js';
 
+	let { data } = $props();
+
 	let selected = $state('run');
 	const ev = $derived(eventById(selected));
 
@@ -53,6 +55,15 @@
 			results[event.id] = v;
 		}
 		store.addAttempt({ date: attemptDate, results });
+
+		// Logged-in users also save to the server so admins can see their scores.
+		if (data.user) {
+			fetch('/api/attempts', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ date: attemptDate, results })
+			}).catch(() => {});
+		}
 		inputs = { run: '', pushups: '', plank: '' };
 	}
 
