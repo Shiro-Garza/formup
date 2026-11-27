@@ -1,4 +1,3 @@
-
 <script>
 	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
@@ -15,7 +14,6 @@
 		todayISO
 	} from '#lib/events.js';
 
-	// Login
 	let { form, data } = $props();
 	let showLoginModal = $state(false);
 
@@ -26,7 +24,6 @@
 	const minutes = $derived(String(time.getMinutes()).padStart(2, '0'));
 	const seconds = $derived(String(time.getSeconds()).padStart(2, '0'));
 
-	// Dynamic greeting
 	const greeting = $derived(
 		parseInt(hours, 10) < 12
 			? 'Morning'
@@ -46,11 +43,6 @@
 	// PT session information
 	const session = $derived(nextSession(data.sessions, time));
 
-	const attended = $derived(
-		session ? store.isAttended(session.key) : false
-	);
-
-	// Dynamic PT heading
 	const ptHeading = $derived(
 		session
 			? session.date === todayISO(time)
@@ -58,6 +50,152 @@
 				: 'Upcoming PT'
 			: 'PT Schedule'
 	);
+
+	// Attendance management
+	let attendance = $state([]);
+	let attendanceLoading = $state(false);
+	let attendanceSaving = $state(false);
+	let attendanceError = $state('');
+	let attendanceSuccess = $state('');
+
+	const isCadet = $derived(
+		!!data.user && data.user.role !== 'admin'
+	);
+
+	const attended = $derived(
+		session
+			? attendance.some((a) => a.sessionId === session.id)
+			: false
+	);
+
+	const attendanceOpens = $derived(
+		session
+			? session.start.getTime() - 15 * 60 * 1000
+			: 0
+	);
+
+	const attendanceCloses = $derived(
+		session
+			? session.start.getTime() + 120 * 60 * 1000
+			: 0
+	);
+
+	const canAttend = $derived(
+		isCadet &&
+		!!session &&
+		!attended &&
+		time.getTime() >= attendanceOpens &&
+		time.getTime() <= attendanceCloses
+	);
+
+	// Reload attendance whenever the authenticated account changes.
+	$effect(() => {
+		const user = data.user;
+		const controller = new AbortController();
+
+		attendance = [];
+		attendanceError = '';
+		attendanceSuccess = '';
+		attendanceLoading = false;
+		attendanceSaving = false;
+
+		if (user && user.role !== 'admin') {
+			loadAttendance(controller.signal);
+		}
+
+		return () => controller.abort();
+	});
+
+	async function loadAttendance(signal) {
+		attendanceLoading = true;
+		attendanceError = '';
+
+		try {
+			const response = await fetch('/api/attendance', {
+				signal
+			});
+
+			if (!response.ok) {
+				throw new Error('Unable to load attendance.');
+			}
+
+			const result = await response.json();
+
+			if (!signal.aborted) {
+				attendance = result.attendance ?? [];
+			}
+		} catch (err) {
+			if (!signal.aborted) {
+				attendanceError = 'Unable to load attendance. Refresh to try again.';
+			}
+		} finally {
+			if (!signal.aborted) {
+				attendanceLoading = false;
+			}
+		}
+	}
+
+	async function markAttendance() {
+		if (!data.user) {
+			showLoginModal = true;
+			return;
+		}
+
+		if (!canAttend || attendanceSaving || attendanceLoading) {
+			return;
+		}
+
+		const sessionId = session.id;
+		const accountEmail = data.user.email;
+
+		attendanceSaving = true;
+		attendanceError = '';
+		attendanceSuccess = '';
+
+		try {
+			const response = await fetch('/api/attendance', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({
+					sessionId
+				})
+			});
+
+			const result = await response.json().catch(() => null);
+
+			// Ignore the response if the active account changed.
+			if (data.user?.email !== accountEmail) return;
+
+			if (!response.ok) {
+				throw new Error(
+					result?.message || 'Unable to record attendance.'
+				);
+			}
+
+			if (!attendance.some((a) => a.sessionId === sessionId)) {
+				attendance = [
+					...attendance,
+					{
+						sessionId
+					}
+				];
+			}
+
+			attendanceSuccess =
+				result?.message || 'Attendance recorded successfully.';
+		} catch (err) {
+			if (data.user?.email === accountEmail) {
+				attendanceError =
+					err.message || 'Something went wrong. Please try again.';
+			}
+		} finally {
+			if (data.user?.email === accountEmail) {
+				attendanceSaving = false;
+			}
+		}
+	}
 
 	// PFA progress
 	const progress = $derived(
@@ -131,14 +269,70 @@
 			</span>
 		</div>
 
-		<button
-			class="btn"
-			class:done={attended}
-			aria-pressed={attended}
-			onclick={() => store.toggleAttended(session.key)}
-		>
-			{attended ? 'Attended ✓' : 'Mark attended'}
-		</button>
+		<!-- Attendance controls -->
+		{#if !data.user}
+			<button
+				class="btn"
+				onclick={() => (showLoginModal = true)}
+			>
+				Log in to mark attendance
+			</button>
+
+		{:else if data.user.role === 'admin'}
+			<p class="attendance-hint muted">
+				Administrator account — cadet check-in is unavailable.
+			</p>
+
+		{:else if attendanceLoading}
+			<button class="btn ghost" disabled>
+				Loading attendance...
+			</button>
+
+		{:else if attended}
+			<button class="btn done" disabled>
+				Attendance recorded ✓
+			</button>
+
+		{:else if time.getTime() < attendanceOpens}
+			<button class="btn ghost locked" disabled>
+				Attendance not open yet
+			</button>
+
+			<p class="attendance-hint muted">
+				Check-in opens 15 minutes before PT.
+			</p>
+
+		{:else if time.getTime() > attendanceCloses}
+			<button class="btn ghost locked" disabled>
+				Attendance closed
+			</button>
+
+		{:else}
+			<button
+				class="btn"
+				onclick={markAttendance}
+				disabled={!canAttend || attendanceSaving}
+			>
+				{attendanceSaving ? 'Recording...' : 'Mark attended'}
+			</button>
+
+			<p class="attendance-hint muted">
+				Check-in is currently available.
+			</p>
+		{/if}
+
+		{#if attendanceError}
+			<p class="error" role="alert">
+				{attendanceError}
+			</p>
+		{/if}
+
+		{#if attendanceSuccess}
+			<p class="positive attendance-hint" role="status">
+				{attendanceSuccess}
+			</p>
+		{/if}
+
 	{:else}
 		<h2>No session scheduled</h2>
 		<p class="muted">Check the schedule for future PT sessions.</p>
@@ -266,6 +460,24 @@
 
 	.session-location span {
 		min-width: 0;
+	}
+
+	.attendance-hint {
+		font-size: 0.875rem;
+		text-align: center;
+	}
+
+	.locked {
+		color: var(--color-text-muted);
+		cursor: not-allowed;
+	}
+
+	button:disabled {
+		cursor: not-allowed;
+	}
+
+	.btn.done {
+		opacity: 1;
 	}
 
 	.schedule-link {
