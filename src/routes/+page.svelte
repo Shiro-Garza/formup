@@ -1,3 +1,4 @@
+
 <script>
 	import { onMount } from 'svelte';
 	import { enhance } from '$app/forms';
@@ -99,7 +100,7 @@
 		time.getTime() <= attendanceCloses
 	);
 
-	// Reload attendance whenever the authenticated account changes.
+	// Reload attendance whenever the account changes.
 	$effect(() => {
 		const user = data.user;
 		const controller = new AbortController();
@@ -135,11 +136,13 @@
 			if (!signal.aborted) {
 				attendance = result.attendance ?? [];
 			}
+
 		} catch (err) {
 			if (!signal.aborted) {
 				attendanceError =
 					'Unable to load attendance. Refresh to try again.';
 			}
+
 		} finally {
 			if (!signal.aborted) {
 				attendanceLoading = false;
@@ -182,7 +185,7 @@
 
 			const result = await response.json().catch(() => null);
 
-			// Ignore the response if the active account changed.
+			// Ignore responses if the account changed.
 			if (data.user?.email !== accountEmail) return;
 
 			if (!response.ok) {
@@ -206,6 +209,7 @@
 
 			attendanceSuccess =
 				result?.message || 'Attendance recorded successfully.';
+
 		} catch (err) {
 			if (data.user?.email === accountEmail) {
 				attendanceError =
@@ -213,6 +217,7 @@
 						? err.message
 						: 'Something went wrong. Please try again.';
 			}
+
 		} finally {
 			if (data.user?.email === accountEmail) {
 				attendanceSaving = false;
@@ -233,12 +238,15 @@
 	);
 </script>
 
+<!-- Home header -->
 <header class="row">
 	<h2 class="brand">FormUp</h2>
 
 	{#if data.user}
 		<form method="POST" action="?/logout" use:enhance>
-			<button class="btn ghost">Log out</button>
+			<button class="btn ghost">
+				Log out
+			</button>
 		</form>
 	{:else}
 		<button
@@ -252,6 +260,7 @@
 
 <LoginModal bind:open={showLoginModal} {form} />
 
+<!-- Welcome section -->
 <section class="welcome-title">
 	<h1>
 		Good {greeting}{data.username ? `, ${data.username}` : ''}
@@ -262,28 +271,127 @@
 	</p>
 </section>
 
-<!-- PT Session Card -->
-<section class="card stack">
-	<div class="row">
-		<p class="section-label">{ptHeading}</p>
+<!-- Responsive dashboard grid -->
+<div class="dashboard-grid">
 
-		{#if session}
-			<span class="pill">
-				{untilLabel(session.start, time)}
-			</span>
-		{/if}
-	</div>
+	<!-- PT Session Card -->
+	<section class="card stack">
+		<div class="row">
+			<p class="section-label">{ptHeading}</p>
 
-	{#if session}
-		<div class="session-info">
-			<h2>{sessionTimeLabel(session.start)}</h2>
-
-			<p>
-				{session.title}{session.detail ? `: ${session.detail}` : ''}
-			</p>
+			{#if session}
+				<span class="pill">
+					{untilLabel(session.start, time)}
+				</span>
+			{/if}
 		</div>
 
-		<div class="session-location">
+		{#if session}
+			<div class="session-info">
+				<h2>{sessionTimeLabel(session.start)}</h2>
+
+				<p>
+					{session.title}{session.detail ? `: ${session.detail}` : ''}
+				</p>
+			</div>
+
+			<div class="session-location">
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
+					<circle cx="12" cy="10" r="3" />
+				</svg>
+
+				<span>
+					{session.location || 'Location to be announced'}
+				</span>
+			</div>
+
+			<!-- Attendance controls -->
+			{#if !data.user}
+				<button
+					class="btn"
+					onclick={() => (showLoginModal = true)}
+				>
+					Log in to mark attendance
+				</button>
+
+			{:else if data.user.role === 'admin'}
+				<p class="attendance-hint muted">
+					Administrator account — cadet check-in is unavailable.
+				</p>
+
+			{:else if attendanceLoading}
+				<button class="btn ghost" disabled>
+					Loading attendance...
+				</button>
+
+			{:else if attended}
+				<button class="btn done" disabled>
+					Attendance recorded ✓
+				</button>
+
+			{:else if time.getTime() < attendanceOpens}
+				<button class="btn ghost locked" disabled>
+					Attendance not open yet
+				</button>
+
+				<p class="attendance-hint muted">
+					Check-in opens 15 minutes before PT.
+				</p>
+
+			{:else if time.getTime() > attendanceCloses}
+				<button class="btn ghost locked" disabled>
+					Attendance closed
+				</button>
+
+			{:else}
+				<button
+					class="btn"
+					onclick={markAttendance}
+					disabled={!canAttend || attendanceSaving}
+				>
+					{attendanceSaving
+						? 'Recording...'
+						: 'Mark attended'}
+				</button>
+
+				<p class="attendance-hint muted">
+					Check-in is currently available.
+				</p>
+			{/if}
+
+			{#if attendanceError}
+				<p class="error" role="alert">
+					{attendanceError}
+				</p>
+			{/if}
+
+			{#if attendanceSuccess}
+				<p class="positive attendance-hint" role="status">
+					{attendanceSuccess}
+				</p>
+			{/if}
+
+		{:else}
+			<h2>No session scheduled</h2>
+
+			<p class="muted">
+				Check the schedule for future PT sessions.
+			</p>
+		{/if}
+
+		<!-- Schedule shortcut -->
+		<a href="/schedule" class="btn ghost schedule-link">
 			<svg
 				width="20"
 				height="20"
@@ -295,164 +403,71 @@
 				stroke-linejoin="round"
 				aria-hidden="true"
 			>
-				<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
-				<circle cx="12" cy="10" r="3" />
+				<rect x="3" y="5" width="18" height="16" rx="2" />
+				<path d="M16 3v4M8 3v4M3 10h18" />
 			</svg>
 
-			<span>
-				{session.location || 'Location to be announced'}
-			</span>
+			View full PT schedule
+		</a>
+	</section>
+
+	<!-- PFA Record Card -->
+	<section class="card stack">
+		<div class="row">
+			<p class="section-label">PFA record</p>
+			<p class="muted">Target {store.target}</p>
 		</div>
 
-		<!-- Attendance controls -->
-		{#if !data.user}
-			<button
-				class="btn"
-				onclick={() => (showLoginModal = true)}
-			>
-				Log in to mark attendance
-			</button>
+		<div class="row score">
+			<p class="stat">{store.composite.toFixed(1)}</p>
 
-		{:else if data.user.role === 'admin'}
-			<p class="attendance-hint muted">
-				Administrator account — cadet check-in is unavailable.
-			</p>
+			{#if store.delta !== null}
+				<p
+					class:positive={store.delta >= 0}
+					class:muted={store.delta < 0}
+				>
+					{store.delta >= 0 ? 'Up' : 'Down'}
+					{Math.abs(store.delta).toFixed(1)} pts since last attempt
+				</p>
+			{/if}
+		</div>
 
-		{:else if attendanceLoading}
-			<button class="btn ghost" disabled>
-				Loading attendance...
-			</button>
+		<!-- Progress toward target -->
+		<div
+			class="bar"
+			role="progressbar"
+			aria-label="Progress toward target score"
+			aria-valuemin="0"
+			aria-valuemax="100"
+			aria-valuenow={Math.round(progress)}
+		>
+			<span style="width: {progress}%"></span>
+		</div>
 
-		{:else if attended}
-			<button class="btn done" disabled>
-				Attendance recorded ✓
-			</button>
+		{#if store.latest}
+			<ul class="events">
+				{#each EVENTS as ev}
+					<li class="row">
+						<span class="muted">{ev.label}</span>
 
-		{:else if time.getTime() < attendanceOpens}
-			<button class="btn ghost locked" disabled>
-				Attendance not open yet
-			</button>
-
-			<p class="attendance-hint muted">
-				Check-in opens 15 minutes before PT.
-			</p>
-
-		{:else if time.getTime() > attendanceCloses}
-			<button class="btn ghost locked" disabled>
-				Attendance closed
-			</button>
+						<span class="value">
+							{formatValue(
+								ev,
+								store.latest.results[ev.id]
+							)}
+						</span>
+					</li>
+				{/each}
+			</ul>
 
 		{:else}
-			<button
-				class="btn"
-				onclick={markAttendance}
-				disabled={!canAttend || attendanceSaving}
-			>
-				{attendanceSaving
-					? 'Recording...'
-					: 'Mark attended'}
-			</button>
-
-			<p class="attendance-hint muted">
-				Check-in is currently available.
+			<p class="muted">
+				Record an assessment on the Progress tab
+				to see your results here.
 			</p>
 		{/if}
-
-		{#if attendanceError}
-			<p class="error" role="alert">
-				{attendanceError}
-			</p>
-		{/if}
-
-		{#if attendanceSuccess}
-			<p class="positive attendance-hint" role="status">
-				{attendanceSuccess}
-			</p>
-		{/if}
-
-	{:else}
-		<h2>No session scheduled</h2>
-
-		<p class="muted">
-			Check the schedule for future PT sessions.
-		</p>
-	{/if}
-
-	<a href="/schedule" class="btn ghost schedule-link">
-		<svg
-			width="20"
-			height="20"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
-		>
-			<rect x="3" y="5" width="18" height="16" rx="2" />
-			<path d="M16 3v4M8 3v4M3 10h18" />
-		</svg>
-
-		View full PT schedule
-	</a>
-</section>
-
-<!-- PFA Record Card -->
-<section class="card stack">
-	<div class="row">
-		<p class="section-label">PFA record</p>
-		<p class="muted">Target {store.target}</p>
-	</div>
-
-	<div class="row score">
-		<p class="stat">{store.composite.toFixed(1)}</p>
-
-		{#if store.delta !== null}
-			<p
-				class:positive={store.delta >= 0}
-				class:muted={store.delta < 0}
-			>
-				{store.delta >= 0 ? 'Up' : 'Down'}
-				{Math.abs(store.delta).toFixed(1)} pts since last attempt
-			</p>
-		{/if}
-	</div>
-
-	<div
-		class="bar"
-		role="progressbar"
-		aria-label="Progress toward target score"
-		aria-valuemin="0"
-		aria-valuemax="100"
-		aria-valuenow={Math.round(progress)}
-	>
-		<span style="width: {progress}%"></span>
-	</div>
-
-	{#if store.latest}
-		<ul class="events">
-			{#each EVENTS as ev}
-				<li class="row">
-					<span class="muted">{ev.label}</span>
-
-					<span class="value">
-						{formatValue(
-							ev,
-							store.latest.results[ev.id]
-						)}
-					</span>
-				</li>
-			{/each}
-		</ul>
-
-	{:else}
-		<p class="muted">
-			Record an assessment on the Progress tab
-			to see your results here.
-		</p>
-	{/if}
-</section>
+	</section>
+</div>
 
 <!-- Dynamic Announcements -->
 <section
@@ -521,6 +536,7 @@
 		</article>
 
 	{:else}
+		<!-- Empty announcement state -->
 		<div class="announcement-empty">
 			<svg
 				width="32"
@@ -547,6 +563,33 @@
 </section>
 
 <style>
+	/* Responsive dashboard layout */
+
+	.dashboard-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--space-4);
+	}
+
+	.dashboard-grid > section {
+		min-width: 0;
+	}
+
+	/* Two-column desktop layout */
+
+	@media (min-width: 1100px) {
+		.dashboard-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			align-items: stretch;
+		}
+
+		.dashboard-grid .schedule-link {
+			margin-top: auto;
+		}
+	}
+
+	/* Branding */
+
 	.brand {
 		color: var(--color-accent);
 	}
@@ -559,6 +602,8 @@
 		font-size: 0.875rem;
 		font-weight: 600;
 	}
+
+	/* PT session */
 
 	.session-info {
 		overflow-wrap: anywhere;
@@ -582,6 +627,8 @@
 		min-width: 0;
 	}
 
+	/* Attendance */
+
 	.attendance-hint {
 		font-size: 0.875rem;
 		text-align: center;
@@ -600,6 +647,8 @@
 		opacity: 1;
 	}
 
+	/* Schedule shortcut */
+
 	.schedule-link {
 		gap: var(--space-2);
 		text-align: center;
@@ -609,8 +658,11 @@
 		flex-shrink: 0;
 	}
 
+	/* PFA record */
+
 	.score {
 		align-items: baseline;
+		flex-wrap: wrap;
 	}
 
 	ul {
@@ -632,6 +684,7 @@
 	}
 
 	/* Dynamic announcements */
+
 	.announcements-heading {
 		flex-wrap: wrap;
 		gap: var(--space-2);
@@ -652,6 +705,8 @@
 		min-width: 0;
 		overflow-wrap: anywhere;
 	}
+
+	/* Important announcements */
 
 	.announcement.important {
 		border-color: var(--color-accent);
@@ -699,6 +754,8 @@
 		color: var(--color-text);
 	}
 
+	/* Empty announcement state */
+
 	.announcement-empty {
 		display: flex;
 		flex-direction: column;
@@ -711,6 +768,8 @@
 	.announcement-empty svg {
 		color: var(--color-text-muted);
 	}
+
+	/* Small mobile screens */
 
 	@media (max-width: 380px) {
 		.announcement {

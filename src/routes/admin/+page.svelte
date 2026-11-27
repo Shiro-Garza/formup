@@ -1,15 +1,11 @@
+
 <script>
 	import { onMount } from 'svelte';
 	import AnnouncementManager from '#lib/AnnouncementManager.svelte';
+	import PfaScoreCards from '#lib/PfaScoreCards.svelte';
 	import { enhance, applyAction } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import {
-		EVENTS,
-		compositeScore,
-		formatValue,
-		formatDate,
-		todayISO
-	} from '#lib/events.js';
+	import { formatDate, todayISO } from '#lib/events.js';
 
 	let { data, form } = $props();
 
@@ -27,21 +23,7 @@
 	let editDetail = $state('');
 	let saving = $state(false);
 
-	const rows = $derived(
-		data.roster.map((r) => {
-			const latest = r.attempts.at(-1) ?? null;
-
-			return {
-				...r,
-				latest,
-				composite: latest
-					? compositeScore(latest.results)
-					: null
-			};
-		})
-	);
-
-	// Open the editing form with existing session information.
+	// Open the session editing form.
 	function startEdit(session) {
 		editingId = session.id;
 		editTitle = session.title;
@@ -51,7 +33,7 @@
 		editDetail = session.detail ?? '';
 	}
 
-	// Close the editing form without saving.
+	// Cancel session editing.
 	function cancelEdit() {
 		editingId = null;
 		editTitle = '';
@@ -61,7 +43,7 @@
 		editDetail = '';
 	}
 
-	// Submit changes and close the form only after success.
+	// Save session changes.
 	function handleEdit() {
 		saving = true;
 
@@ -78,16 +60,18 @@
 		};
 	}
 
-	// Prevent accidental session deletion.
+	// Confirm session deletion.
 	function confirmDelete({ cancel }) {
-		if (!window.confirm(
-			'Delete this PT session and all associated attendance records?'
-		)) {
+		if (
+			!window.confirm(
+				'Delete this PT session and all associated attendance records?'
+			)
+		) {
 			cancel();
 		}
 	}
 
-	// Attendance dashboard.
+	// Attendance management.
 	let attendanceSessionId = $state('');
 	let attendanceBusy = $state(false);
 	let attendanceFeedback = $state(null);
@@ -102,9 +86,7 @@
 	});
 
 	function sessionStart(s) {
-		return new Date(
-			`${s.date}T${s.time}:00`
-		).getTime();
+		return new Date(`${s.date}T${s.time}:00`).getTime();
 	}
 
 	const attendanceSessions = $derived(
@@ -245,7 +227,8 @@
 				attendanceFeedback = {
 					sessionId,
 					success: false,
-					message: 'Unable to refresh attendance. Please refresh the page.'
+					message:
+						'Unable to refresh attendance. Please refresh the page.'
 				};
 
 			} finally {
@@ -280,6 +263,7 @@
 
 	<div class="field">
 		<label for="s-title">Title</label>
+
 		<input
 			id="s-title"
 			name="title"
@@ -292,6 +276,7 @@
 	<div class="two">
 		<div class="field">
 			<label for="s-date">Date</label>
+
 			<input
 				id="s-date"
 				name="date"
@@ -303,6 +288,7 @@
 
 		<div class="field">
 			<label for="s-time">Start time</label>
+
 			<input
 				id="s-time"
 				name="time"
@@ -315,6 +301,7 @@
 
 	<div class="field">
 		<label for="s-location">Location</label>
+
 		<input
 			id="s-location"
 			name="location"
@@ -325,6 +312,7 @@
 
 	<div class="field">
 		<label for="s-detail">Details</label>
+
 		<input
 			id="s-detail"
 			name="detail"
@@ -352,6 +340,7 @@
 		<div class="session">
 
 			{#if editingId === s.id}
+
 				<!-- Edit session form -->
 				<form
 					class="edit-form stack"
@@ -467,6 +456,7 @@
 				</form>
 
 			{:else}
+
 				<!-- Normal session display -->
 				<div class="session-info">
 					<strong>
@@ -490,7 +480,9 @@
 							stroke-linejoin="round"
 							aria-hidden="true"
 						>
-							<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
+							<path
+								d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"
+							/>
 							<circle cx="12" cy="10" r="3" />
 						</svg>
 
@@ -618,6 +610,7 @@
 				<strong class="positive">
 					{presentCount}
 				</strong>
+
 				<span>Present</span>
 			</div>
 
@@ -658,7 +651,9 @@
 				aria-valuemax="100"
 				aria-valuenow={attendanceRate}
 			>
-				<span style:width={`${attendanceRate}%`}></span>
+				<span
+					style:width={`${attendanceRate}%`}
+				></span>
 			</div>
 		{/if}
 
@@ -670,7 +665,6 @@
 		<!-- Cadet attendance roster -->
 		<h3>Cadet attendance roster</h3>
 
-		<!-- Session-specific attendance feedback -->
 		{#if attendanceFeedback && attendanceFeedback.sessionId === selectedSession.id}
 			{#if attendanceFeedback.success}
 				<p class="positive" role="status">
@@ -779,106 +773,25 @@
 <!-- Announcement Management -->
 <AnnouncementManager announcements={data.announcements ?? []} />
 
-<!-- Cadet PFA scores -->
-<section class="card stack">
-	<p class="section-label">
-		PFA scores by cadet
-	</p>
-
-	<div class="scroll">
-		<table>
-			<thead>
-				<tr>
-					<th>Cadet</th>
-
-					{#each EVENTS as e}
-						<th>{e.label}</th>
-					{/each}
-
-					<th>Composite</th>
-				</tr>
-			</thead>
-
-			<tbody>
-				{#each rows as r (r.email)}
-					<tr>
-						<td>
-							{r.name}
-
-							<span class="muted small">
-								{r.email}
-							</span>
-						</td>
-
-						{#if r.latest}
-							{#each EVENTS as e}
-								<td>
-									{formatValue(
-										e,
-										r.latest.results[e.id]
-									)}
-								</td>
-							{/each}
-
-							<td class="stat-cell">
-								{r.composite.toFixed(1)}
-							</td>
-
-						{:else}
-							<td
-								class="muted"
-								colspan={EVENTS.length + 1}
-							>
-								No attempts yet
-							</td>
-						{/if}
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
-
-	{#each rows.filter((r) => r.attempts.length > 1) as r (r.email)}
-		<details>
-			<summary>
-				{r.name}: all {r.attempts.length} attempts
-			</summary>
-
-			<ul>
-				{#each [...r.attempts].reverse() as a (a.id)}
-					<li class="row">
-						<span class="muted">
-							{formatDate(a.date)}
-						</span>
-
-						<span>
-							{EVENTS.map((e) =>
-								formatValue(e, a.results[e.id])
-							).join(' — ')}
-						</span>
-
-						<span class="stat-cell">
-							{compositeScore(a.results).toFixed(1)}
-						</span>
-					</li>
-				{/each}
-			</ul>
-		</details>
-	{/each}
-</section>
+<!-- Responsive Cadet PFA Scores -->
+<PfaScoreCards roster={data.roster ?? []} />
 
 <style>
+	/* Form layout */
+
 	.two {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: var(--space-3);
 	}
+
+	/* PT session layout */
 
 	.session {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		gap: var(--space-4);
+		gap: var(--space-3);
 		padding: var(--space-3) 0;
 		border-bottom: 1px solid var(--color-border);
 	}
@@ -897,24 +810,17 @@
 		display: flex;
 		align-items: flex-start;
 		gap: var(--space-2);
-		color: var(--color-text);
-		font-size: 0.875rem;
 		margin-top: var(--space-2);
 	}
 
 	.location svg {
-		color: var(--color-accent);
 		flex-shrink: 0;
+		color: var(--color-accent);
 		margin-top: 2px;
-	}
-
-	.location span {
-		min-width: 0;
 	}
 
 	.session-actions {
 		display: flex;
-		align-items: center;
 		gap: var(--space-2);
 		flex-shrink: 0;
 	}
@@ -923,22 +829,26 @@
 		gap: var(--space-2);
 	}
 
+	/* Session editing */
+
 	.edit-form {
 		width: 100%;
+		min-width: 0;
 		padding: var(--space-4);
 		background: var(--color-bg);
 		border: 1px solid var(--color-accent);
-		border-radius: var(--radius-card);
+		border-radius: var(--radius-control);
 	}
 
 	.edit-heading {
 		color: var(--color-accent);
 	}
 
+	/* Feedback messages */
+
 	.feedback {
 		padding: var(--space-3);
-		background: var(--color-card);
-		border: 1px solid currentColor;
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-control);
 	}
 
@@ -946,65 +856,13 @@
 		color: var(--color-positive);
 	}
 
-	button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.scroll {
-		overflow-x: auto;
-	}
-
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.9rem;
-	}
-
-	th,
-	td {
-		padding: var(--space-3) var(--space-2);
-		text-align: left;
-		border-bottom: 1px solid var(--color-border);
-		vertical-align: top;
-	}
-
-	th {
-		color: var(--color-text-muted);
-		font-weight: 500;
-		white-space: nowrap;
-	}
-
 	.small {
 		display: block;
 		font-size: 0.75rem;
 	}
 
-	.stat-cell {
-		font-family: var(--font-display);
-		font-size: 1.25rem;
-		font-weight: 700;
-		color: var(--color-accent);
-	}
-
-	summary {
-		min-height: var(--touch-target);
-		display: flex;
-		align-items: center;
-		cursor: pointer;
-	}
-
-	ul {
-		margin: 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	li {
-		padding: var(--space-2) 0;
-	}
-
 	/* Attendance statistics */
+
 	.attendance-stats {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1039,6 +897,7 @@
 	}
 
 	/* Attendance roster */
+
 	.attendance-row {
 		display: flex;
 		align-items: center;
@@ -1068,6 +927,7 @@
 	}
 
 	/* Mobile responsiveness */
+
 	@media (max-width: 600px) {
 		.session {
 			flex-direction: column;
