@@ -52,17 +52,17 @@
 :root[data-theme='light'] {
 	color-scheme: light;
 
-	--color-bg: #eaf0f7;
-	--color-card: #ffffff;
-	--color-accent: #946000;
-	--color-positive: #08783e;
-	--color-text: #0b1f3a;
-	--color-text-muted: #4a6078;
-	--color-on-accent: #ffffff;
-	--color-border: rgba(11, 31, 58, 0.16);
-	--color-error: #b91c1c;
-	--color-focus: #946000;
-	--color-hover: rgba(11, 31, 58, 0.05);
+	--color-bg: #d9e5f3;
+	--color-card: #edf4fb;
+	--color-accent: #c98a18;
+	--color-positive: #25855a;
+	--color-text: #002654;
+	--color-text-muted: #466385;
+	--color-on-accent: #002654;
+	--color-border: rgba(0, 38, 84, 0.14);
+	--color-error: #c24646;
+	--color-focus: #c98a18;
+	--color-hover: rgba(0, 38, 84, 0.06);
 }
 
 /* Tablet layout */
