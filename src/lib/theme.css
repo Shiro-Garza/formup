@@ -1,13 +1,17 @@
+
 /*
   FormUp theme: the single place to change styling.
   Colors, fonts, corner radius, spacing, and layout breakpoints
-  are all defined as CSS variables below. Components only use these variables.
+  are all defined as CSS variables below.
 */
 
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700&family=Inter:wght@400;500;600&display=swap');
 
+/* Default dark theme */
 :root {
-	/* Color */
+	color-scheme: dark;
+
+	/* Colors */
 	--color-bg: #0b1f3a;
 	--color-card: #14304f;
 	--color-accent: #ffb020;
@@ -16,8 +20,11 @@
 	--color-text-muted: #9fb3c8;
 	--color-on-accent: #0b1f3a;
 	--color-border: rgba(159, 179, 200, 0.18);
+	--color-error: #ff7676;
+	--color-focus: #ffb020;
+	--color-hover: rgba(255, 255, 255, 0.06);
 
-	/* Type */
+	/* Typography */
 	--font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
 	--font-body: 'Inter', system-ui, sans-serif;
 
@@ -41,16 +48,24 @@
 	--tabbar-height: 64px;
 }
 
-/* Light mode: swap the same variables */
+/* Light theme */
 :root[data-theme='light'] {
+	color-scheme: light;
+
 	--color-bg: #eaf0f7;
 	--color-card: #ffffff;
+	--color-accent: #946000;
+	--color-positive: #08783e;
 	--color-text: #0b1f3a;
 	--color-text-muted: #4a6078;
-	--color-border: rgba(11, 31, 58, 0.12);
+	--color-on-accent: #ffffff;
+	--color-border: rgba(11, 31, 58, 0.16);
+	--color-error: #b91c1c;
+	--color-focus: #946000;
+	--color-hover: rgba(11, 31, 58, 0.05);
 }
 
-/* Layout scale: wider screens get a wider content column and a larger gutter */
+/* Tablet layout */
 @media (min-width: 768px) {
 	:root {
 		--content-max: 720px;
@@ -58,6 +73,7 @@
 	}
 }
 
+/* Desktop layout */
 @media (min-width: 1100px) {
 	:root {
 		--content-max: 960px;
