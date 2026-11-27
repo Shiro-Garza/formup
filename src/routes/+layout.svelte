@@ -5,17 +5,20 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { store } from '#lib/store.svelte.js';
+  import '@fortawesome/fontawesome-free/css/all.min.css';
 
 	let { children, data } = $props();
 
 	onMount(() => store.init());
 
 	const tabs = $derived([
-		{ href: '/', label: 'Home' },
-		{ href: '/log', label: 'Log' },
-		{ href: '/progress', label: 'Progress' },
-		...(data.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin' }] : [])
-	]);
+	{ href: '/', label: 'Home', icon: 'fa-solid fa-house' },
+	{ href: '/log', label: 'Log', icon: 'fa-solid fa-pen-to-square' },
+	{ href: '/progress', label: 'Progress', icon: 'fa-solid fa-chart-line' },
+	...(data.user?.role === 'admin'
+		? [{ href: '/admin', label: 'Admin', icon: 'fa-solid fa-shield-halved' }]
+		: [])
+]);
 </script>
 
 <svelte:head>
@@ -36,7 +39,8 @@
 					href={tab.href}
 					aria-current={page.url.pathname === tab.href ? 'page' : undefined}
 				>
-					{tab.label}
+					<i class={tab.icon} aria-hidden="true"></i>
+					<span>{tab.label}</span>
 				</a>
 			{/each}
 		</div>
@@ -81,11 +85,18 @@
 
 	.tab {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		gap: 0.25rem;
 		min-height: var(--touch-target);
 		color: var(--color-text-muted);
+		font-size: 0.75rem;
 		font-weight: 500;
+	}
+
+	.tab i {
+		font-size: 1.125rem;
 	}
 
 	.tab[aria-current='page'] {
