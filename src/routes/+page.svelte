@@ -42,8 +42,6 @@
 </script>
 
 <header class="row">
-  <i class="fa-solid fa-house"></i>
-
 	<h2 class="brand">FormUp</h2>
 	{#if data.user}
 		<form method="POST" action="?/logout" use:enhance>
