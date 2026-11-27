@@ -1,5 +1,7 @@
 <script>
-	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
+	import { enhance, applyAction } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import {
 		EVENTS,
 		compositeScore,
@@ -11,6 +13,7 @@
 	let { data, form } = $props();
 
 	const today = todayISO();
+
 	const upcoming = $derived(
 		data.sessions.filter((s) => s.date >= today)
 	);
@@ -76,9 +79,178 @@
 
 	// Prevent accidental session deletion.
 	function confirmDelete({ cancel }) {
-		if (!window.confirm('Are you sure you want to delete this PT session?')) {
+		if (!window.confirm(
+			'Delete this PT session and all associated attendance records?'
+		)) {
 			cancel();
 		}
+	}
+
+	// Attendance dashboard.
+	let attendanceSessionId = $state('');
+	let attendanceBusy = $state(false);
+	let attendanceFeedback = $state(null);
+	let now = $state(Date.now());
+
+	onMount(() => {
+		const timer = setInterval(() => {
+			now = Date.now();
+		}, 1000);
+
+		return () => clearInterval(timer);
+	});
+
+	function sessionStart(s) {
+		return new Date(
+			`${s.date}T${s.time}:00`
+		).getTime();
+	}
+
+	const attendanceSessions = $derived(
+		[...data.sessions].sort((a, b) =>
+			`${b.date} ${b.time}`.localeCompare(
+				`${a.date} ${a.time}`
+			)
+		)
+	);
+
+	const selectedSession = $derived(
+		attendanceSessions.find(
+			(s) => s.id === attendanceSessionId
+		) ??
+		attendanceSessions.find(
+			(s) => sessionStart(s) - 15 * 60000 <= now
+		) ??
+		attendanceSessions.at(-1) ??
+		null
+	);
+
+	const attendancePhase = $derived.by(() => {
+		if (!selectedSession) return 'none';
+
+		const start = sessionStart(selectedSession);
+
+		if (!Number.isFinite(start)) return 'invalid';
+
+		if (now < start - 15 * 60000) {
+			return 'upcoming';
+		}
+
+		if (now > start + 120 * 60000) {
+			return 'closed';
+		}
+
+		return 'open';
+	});
+
+	const attendanceRows = $derived(
+		(data.attendanceRoster ?? []).map((cadet) => ({
+			...cadet,
+			record: (data.attendance ?? []).find(
+				(a) =>
+					a.sessionId === selectedSession?.id &&
+					a.email.toLowerCase() === cadet.email.toLowerCase()
+			)
+		}))
+	);
+
+	const presentCount = $derived(
+		attendanceRows.filter((r) => r.record).length
+	);
+
+	const notPresentCount = $derived(
+		attendanceRows.length - presentCount
+	);
+
+	const attendanceRate = $derived(
+		attendanceRows.length
+			? Math.round(
+				100 * presentCount / attendanceRows.length
+			)
+			: 0
+	);
+
+	const canMarkPresent = $derived(
+		attendancePhase === 'open' ||
+		attendancePhase === 'closed'
+	);
+
+	function attendanceTime(value) {
+		const date = new Date(value);
+
+		return Number.isFinite(date.getTime())
+			? date.toLocaleString('en-US', {
+				month: 'short',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit',
+				hour12: false
+			})
+			: 'Time unavailable';
+	}
+
+	// Handle attendance separately from scheduling feedback.
+	function handleAttendance({ cancel, formData, action }) {
+		if (attendanceBusy) {
+			cancel();
+			return;
+		}
+
+		if (
+			action.searchParams.has('/removeAttendance') &&
+			!window.confirm(
+				'Remove this cadet’s attendance record?'
+			)
+		) {
+			cancel();
+			return;
+		}
+
+		const sessionId = String(
+			formData.get('sessionId') ?? ''
+		);
+
+		attendanceSessionId = sessionId;
+		attendanceFeedback = null;
+		attendanceBusy = true;
+
+		return async ({ result }) => {
+			try {
+				if (result.type === 'success') {
+					await invalidateAll();
+
+					attendanceFeedback = {
+						sessionId,
+						success: true,
+						message:
+							result.data?.success ??
+							'Attendance updated successfully.'
+					};
+
+				} else if (result.type === 'failure') {
+					attendanceFeedback = {
+						sessionId,
+						success: false,
+						message:
+							result.data?.message ??
+							'Unable to update attendance.'
+					};
+
+				} else {
+					await applyAction(result);
+				}
+
+			} catch (err) {
+				attendanceFeedback = {
+					sessionId,
+					success: false,
+					message: 'Unable to refresh attendance. Please refresh the page.'
+				};
+
+			} finally {
+				attendanceBusy = false;
+			}
+		};
 	}
 </script>
 
@@ -97,7 +269,12 @@
 {/if}
 
 <!-- Create PT session -->
-<form class="card stack" method="POST" action="?/addSession" use:enhance>
+<form
+	class="card stack"
+	method="POST"
+	action="?/addSession"
+	use:enhance
+>
 	<p class="section-label">Schedule a PT session</p>
 
 	<div class="field">
@@ -164,7 +341,10 @@
 <section class="card stack">
 	<div class="row">
 		<p class="section-label">Upcoming sessions</p>
-		<span class="muted">{upcoming.length} scheduled</span>
+
+		<span class="muted">
+			{upcoming.length} scheduled
+		</span>
 	</div>
 
 	{#each upcoming as s (s.id)}
@@ -178,12 +358,19 @@
 					action="?/editSession"
 					use:enhance={handleEdit}
 				>
-					<h2 class="edit-heading">Edit PT session</h2>
+					<h2 class="edit-heading">
+						Edit PT session
+					</h2>
 
-					<input type="hidden" name="id" value={s.id} />
+					<input
+						type="hidden"
+						name="id"
+						value={s.id}
+					/>
 
 					<div class="field">
 						<label for="edit-title">Title</label>
+
 						<input
 							id="edit-title"
 							name="title"
@@ -196,6 +383,7 @@
 					<div class="two">
 						<div class="field">
 							<label for="edit-date">Date</label>
+
 							<input
 								id="edit-date"
 								name="date"
@@ -207,7 +395,10 @@
 						</div>
 
 						<div class="field">
-							<label for="edit-time">Start time</label>
+							<label for="edit-time">
+								Start time
+							</label>
+
 							<input
 								id="edit-time"
 								name="time"
@@ -219,7 +410,10 @@
 					</div>
 
 					<div class="field">
-						<label for="edit-location">Location</label>
+						<label for="edit-location">
+							Location
+						</label>
+
 						<input
 							id="edit-location"
 							name="location"
@@ -230,7 +424,10 @@
 					</div>
 
 					<div class="field">
-						<label for="edit-detail">Details</label>
+						<label for="edit-detail">
+							Details
+						</label>
+
 						<textarea
 							id="edit-detail"
 							name="detail"
@@ -241,7 +438,9 @@
 					</div>
 
 					{#if form?.message}
-						<p class="error" role="alert">{form.message}</p>
+						<p class="error" role="alert">
+							{form.message}
+						</p>
 					{/if}
 
 					<div class="two">
@@ -250,7 +449,9 @@
 							type="submit"
 							disabled={saving}
 						>
-							{saving ? 'Saving...' : 'Save changes'}
+							{saving
+								? 'Saving...'
+								: 'Save changes'}
 						</button>
 
 						<button
@@ -268,7 +469,8 @@
 				<!-- Normal session display -->
 				<div class="session-info">
 					<strong>
-						{formatDate(s.date)} · {s.time.replace(':', '')}
+						{formatDate(s.date)} ·
+						{s.time.replace(':', '')}
 					</strong>
 
 					<p class="muted">
@@ -319,6 +521,7 @@
 							<path d="m16 3 5 5-12 12-6 1 1-6Z" />
 							<path d="m14 5 5 5" />
 						</svg>
+
 						Edit
 					</button>
 
@@ -327,7 +530,11 @@
 						action="?/deleteSession"
 						use:enhance={confirmDelete}
 					>
-						<input type="hidden" name="id" value={s.id} />
+						<input
+							type="hidden"
+							name="id"
+							value={s.id}
+						/>
 
 						<button
 							class="btn ghost delete-button"
@@ -347,9 +554,232 @@
 	{/each}
 </section>
 
+<!-- PT Attendance Management -->
+<section
+	class="card stack"
+	aria-labelledby="attendance-heading"
+>
+	<h2 id="attendance-heading">
+		PT Attendance Management
+	</h2>
+
+	{#if selectedSession}
+		<div class="field">
+			<label for="attendance-session">
+				Select PT session
+			</label>
+
+			<select
+				id="attendance-session"
+				value={selectedSession.id}
+				onchange={(e) => {
+					attendanceSessionId = e.currentTarget.value;
+					attendanceFeedback = null;
+				}}
+				disabled={attendanceBusy}
+			>
+				{#each attendanceSessions as s (s.id)}
+					<option value={s.id}>
+						{formatDate(s.date)},
+						{s.date.slice(0, 4)} ·
+						{s.time.replace(':', '')} —
+						{s.title}
+					</option>
+				{/each}
+			</select>
+		</div>
+
+		<p class="muted">
+			{selectedSession.location || 'Location to be announced'}
+		</p>
+
+		<p
+			class="attendance-phase"
+			class:positive={attendancePhase === 'open'}
+		>
+			{attendancePhase === 'open'
+				? 'Check-in open'
+				: attendancePhase === 'closed'
+					? 'Check-in closed — admin corrections available'
+					: attendancePhase === 'upcoming'
+						? 'Upcoming — check-in not open yet'
+						: 'Invalid session time'}
+		</p>
+
+		<!-- Attendance statistics -->
+		<div class="attendance-stats">
+			<div>
+				<strong>{attendanceRows.length}</strong>
+				<span>Total cadets</span>
+			</div>
+
+			<div>
+				<strong class="positive">
+					{presentCount}
+				</strong>
+				<span>Present</span>
+			</div>
+
+			<div>
+				<strong>{notPresentCount}</strong>
+
+				<span>
+					{attendancePhase === 'closed'
+						? 'Absent'
+						: attendancePhase === 'open'
+							? 'Not checked in'
+							: 'Pending'}
+				</span>
+			</div>
+		</div>
+
+		<!-- Attendance percentage -->
+		<div class="row">
+			<span class="muted">
+				{attendancePhase === 'closed'
+					? 'Attendance rate'
+					: 'Check-in rate so far'}
+			</span>
+
+			<strong class="positive">
+				{attendanceRows.length && canMarkPresent
+					? `${attendanceRate}%`
+					: '—'}
+			</strong>
+		</div>
+
+		{#if attendanceRows.length && canMarkPresent}
+			<div
+				class="bar"
+				role="progressbar"
+				aria-label="Attendance rate"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={attendanceRate}
+			>
+				<span style:width={`${attendanceRate}%`}></span>
+			</div>
+		{/if}
+
+		<p class="muted small">
+			Based on currently registered cadets,
+			not historical enrollment.
+		</p>
+
+		<!-- Cadet attendance roster -->
+		<h3>Cadet attendance roster</h3>
+
+		<!-- Session-specific attendance feedback -->
+		{#if attendanceFeedback && attendanceFeedback.sessionId === selectedSession.id}
+			{#if attendanceFeedback.success}
+				<p class="positive" role="status">
+					{attendanceFeedback.message}
+				</p>
+			{:else}
+				<p class="error" role="alert">
+					{attendanceFeedback.message}
+				</p>
+			{/if}
+		{/if}
+
+		{#each attendanceRows as r (r.email)}
+			<div class="attendance-row">
+				<div class="attendance-person">
+					<strong>
+						{r.name || r.email}
+					</strong>
+
+					<span class="muted small">
+						{r.email}
+					</span>
+
+					{#if r.record}
+						<p class="positive">
+							Present ✓
+						</p>
+
+						<p class="muted small">
+							{r.record.source === 'admin'
+								? 'Recorded by admin'
+								: 'Self check-in'}
+							· {attendanceTime(r.record.checkedInAt)}
+						</p>
+
+					{:else if attendancePhase === 'closed'}
+						<p class="error">
+							Absent
+						</p>
+
+					{:else if attendancePhase === 'open'}
+						<p class="attendance-pending">
+							Not checked in
+						</p>
+
+					{:else}
+						<p class="muted">
+							{attendancePhase === 'upcoming'
+								? 'Upcoming'
+								: 'Unavailable'}
+						</p>
+					{/if}
+				</div>
+
+				<form
+					method="POST"
+					action={r.record
+						? '?/removeAttendance'
+						: '?/markPresent'}
+					use:enhance={handleAttendance}
+				>
+					<input
+						type="hidden"
+						name="sessionId"
+						value={selectedSession.id}
+					/>
+
+					<input
+						type="hidden"
+						name="email"
+						value={r.email}
+					/>
+
+					<button
+						class="btn"
+						class:ghost={!!r.record}
+						type="submit"
+						disabled={
+							attendanceBusy ||
+							(!r.record && !canMarkPresent)
+						}
+						aria-label={`${r.record
+							? 'Remove attendance for'
+							: 'Mark present:'} ${r.name || r.email}`}
+					>
+						{r.record
+							? 'Remove'
+							: 'Mark present'}
+					</button>
+				</form>
+			</div>
+
+		{:else}
+			<p class="muted">
+				No cadets registered.
+			</p>
+		{/each}
+
+	{:else}
+		<p class="muted">
+			Create a PT session to manage attendance.
+		</p>
+	{/if}
+</section>
+
 <!-- Cadet PFA scores -->
 <section class="card stack">
-	<p class="section-label">PFA scores by cadet</p>
+	<p class="section-label">
+		PFA scores by cadet
+	</p>
 
 	<div class="scroll">
 		<table>
@@ -370,21 +800,31 @@
 					<tr>
 						<td>
 							{r.name}
-							<span class="muted small">{r.email}</span>
+
+							<span class="muted small">
+								{r.email}
+							</span>
 						</td>
 
 						{#if r.latest}
 							{#each EVENTS as e}
 								<td>
-									{formatValue(e, r.latest.results[e.id])}
+									{formatValue(
+										e,
+										r.latest.results[e.id]
+									)}
 								</td>
 							{/each}
 
 							<td class="stat-cell">
 								{r.composite.toFixed(1)}
 							</td>
+
 						{:else}
-							<td class="muted" colspan={EVENTS.length + 1}>
+							<td
+								class="muted"
+								colspan={EVENTS.length + 1}
+							>
 								No attempts yet
 							</td>
 						{/if}
@@ -560,6 +1000,70 @@
 		padding: var(--space-2) 0;
 	}
 
+	/* Attendance statistics */
+	.attendance-stats {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--space-2);
+	}
+
+	.attendance-stats > div {
+		background: var(--color-bg);
+		padding: var(--space-3) var(--space-2);
+		border-radius: var(--radius-control);
+		text-align: center;
+		overflow-wrap: anywhere;
+	}
+
+	.attendance-stats strong {
+		display: block;
+		font-family: var(--font-display);
+		font-size: 1.75rem;
+	}
+
+	.attendance-stats span {
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+	}
+
+	.attendance-phase {
+		font-size: 0.875rem;
+	}
+
+	.attendance-pending {
+		color: var(--color-accent);
+	}
+
+	/* Attendance roster */
+	.attendance-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		padding: var(--space-3) 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.attendance-row:last-child {
+		border-bottom: 0;
+	}
+
+	.attendance-person {
+		min-width: 0;
+		flex: 1;
+		overflow-wrap: anywhere;
+	}
+
+	.attendance-row form {
+		flex-shrink: 0;
+	}
+
+	#attendance-session {
+		width: 100%;
+		min-width: 0;
+	}
+
+	/* Mobile responsiveness */
 	@media (max-width: 600px) {
 		.session {
 			flex-direction: column;
@@ -578,6 +1082,15 @@
 		}
 
 		.session-actions form button {
+			width: 100%;
+		}
+
+		.attendance-row {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.attendance-row form button {
 			width: 100%;
 		}
 	}
