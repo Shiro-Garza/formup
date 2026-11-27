@@ -1,5 +1,6 @@
 <script>
 	import { onMount } from 'svelte';
+	import AnnouncementManager from '#lib/AnnouncementManager.svelte';
 	import { enhance, applyAction } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import {
@@ -469,7 +470,7 @@
 				<!-- Normal session display -->
 				<div class="session-info">
 					<strong>
-						{formatDate(s.date)} ·
+						{formatDate(s.date)} —
 						{s.time.replace(':', '')}
 					</strong>
 
@@ -581,7 +582,7 @@
 				{#each attendanceSessions as s (s.id)}
 					<option value={s.id}>
 						{formatDate(s.date)},
-						{s.date.slice(0, 4)} ·
+						{s.date.slice(0, 4)} —
 						{s.time.replace(':', '')} —
 						{s.title}
 					</option>
@@ -702,7 +703,7 @@
 							{r.record.source === 'admin'
 								? 'Recorded by admin'
 								: 'Self check-in'}
-							· {attendanceTime(r.record.checkedInAt)}
+							— {attendanceTime(r.record.checkedInAt)}
 						</p>
 
 					{:else if attendancePhase === 'closed'}
@@ -774,6 +775,9 @@
 		</p>
 	{/if}
 </section>
+
+<!-- Announcement Management -->
+<AnnouncementManager announcements={data.announcements ?? []} />
 
 <!-- Cadet PFA scores -->
 <section class="card stack">
@@ -850,7 +854,7 @@
 						<span>
 							{EVENTS.map((e) =>
 								formatValue(e, a.results[e.id])
-							).join(' · ')}
+							).join(' — ')}
 						</span>
 
 						<span class="stat-cell">

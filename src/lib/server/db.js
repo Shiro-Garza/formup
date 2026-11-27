@@ -1,15 +1,30 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { SCHEDULE } from '../events.js';
+import { SCHEDULE, ANNOUNCEMENTS } from '../events.js';
 
 // JSON-file database for PT sessions, PFA attempts,
-// and cadet attendance records.
+// attendance records, and announcements.
 const FILE = path.resolve('data/db.json');
 
 const iso = (d) =>
 	`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Generate the initial PT schedule.
+// Convert existing hardcoded announcements into database records.
+function seedAnnouncements() {
+	return ANNOUNCEMENTS.flatMap((group) =>
+		group.items.map((item, index) => ({
+			id: `original-${group.date}-${index}`,
+			title: 'General Announcement',
+			message: item,
+			priority: 'normal',
+			date: group.date,
+			createdAt: `${group.date}T00:00:00.000Z`,
+			updatedAt: null
+		}))
+	);
+}
+
+// Generate the initial database.
 function seed() {
 	const sessions = [];
 	const today = new Date();
@@ -38,7 +53,8 @@ function seed() {
 	return {
 		sessions,
 		attempts: [],
-		attendance: []
+		attendance: [],
+		announcements: seedAnnouncements()
 	};
 }
 
@@ -54,6 +70,12 @@ function normalize(db) {
 
 	if (!Array.isArray(db.attendance)) {
 		db.attendance = [];
+	}
+
+	// Import original announcements only when the
+	// announcements collection does not exist.
+	if (!Array.isArray(db.announcements)) {
+		db.announcements = seedAnnouncements();
 	}
 
 	return db;
@@ -81,7 +103,7 @@ async function read() {
 		return normalize(db);
 	} catch (err) {
 		// Only create a new database if the file does not exist.
-		// Do not overwrite existing data if another error occurs.
+		// Do not overwrite existing data on other errors.
 		if (err.code !== 'ENOENT') {
 			throw err;
 		}
@@ -100,6 +122,12 @@ export const sortSessions = (list) =>
 		`${a.date} ${a.time}`.localeCompare(
 			`${b.date} ${b.time}`
 		)
+	);
+
+// Sort announcements from newest to oldest.
+export const sortAnnouncements = (list) =>
+	list.sort((a, b) =>
+		b.createdAt.localeCompare(a.createdAt)
 	);
 
 export const getDb = read;
