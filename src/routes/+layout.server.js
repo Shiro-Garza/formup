@@ -1,6 +1,27 @@
-import { getDb } from '#lib/server/db.js';
+
+import {
+	getDb,
+	sortAnnouncements
+} from '#lib/server/db.js';
 
 export async function load({ locals }) {
 	const db = await getDb();
-	return { user: locals.user, sessions: db.sessions };
+
+	const announcements = sortAnnouncements(
+		[...db.announcements]
+	).map((a) => ({
+		id: a.id,
+		title: a.title,
+		message: a.message,
+		priority: a.priority,
+		date: a.date,
+		createdAt: a.createdAt,
+		updatedAt: a.updatedAt
+	}));
+
+	return {
+		user: locals.user,
+		sessions: db.sessions,
+		announcements
+	};
 }

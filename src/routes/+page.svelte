@@ -5,7 +5,6 @@
 	import { store } from '#lib/store.svelte.js';
 	import {
 		EVENTS,
-		ANNOUNCEMENTS,
 		formatValue,
 		formatDate,
 		nextSession,
@@ -17,12 +16,20 @@
 	let { form, data } = $props();
 	let showLoginModal = $state(false);
 
-	// Time tracking
+	// Time tracking.
 	let time = $state(new Date());
 
-	const hours = $derived(String(time.getHours()).padStart(2, '0'));
-	const minutes = $derived(String(time.getMinutes()).padStart(2, '0'));
-	const seconds = $derived(String(time.getSeconds()).padStart(2, '0'));
+	const hours = $derived(
+		String(time.getHours()).padStart(2, '0')
+	);
+
+	const minutes = $derived(
+		String(time.getMinutes()).padStart(2, '0')
+	);
+
+	const seconds = $derived(
+		String(time.getSeconds()).padStart(2, '0')
+	);
 
 	const greeting = $derived(
 		parseInt(hours, 10) < 12
@@ -40,8 +47,10 @@
 		return () => clearInterval(interval);
 	});
 
-	// PT session information
-	const session = $derived(nextSession(data.sessions, time));
+	// PT session information.
+	const session = $derived(
+		nextSession(data.sessions, time)
+	);
 
 	const ptHeading = $derived(
 		session
@@ -51,7 +60,7 @@
 			: 'PT Schedule'
 	);
 
-	// Attendance management
+	// Attendance management.
 	let attendance = $state([]);
 	let attendanceLoading = $state(false);
 	let attendanceSaving = $state(false);
@@ -64,7 +73,9 @@
 
 	const attended = $derived(
 		session
-			? attendance.some((a) => a.sessionId === session.id)
+			? attendance.some(
+				(a) => a.sessionId === session.id
+			)
 			: false
 	);
 
@@ -126,7 +137,8 @@
 			}
 		} catch (err) {
 			if (!signal.aborted) {
-				attendanceError = 'Unable to load attendance. Refresh to try again.';
+				attendanceError =
+					'Unable to load attendance. Refresh to try again.';
 			}
 		} finally {
 			if (!signal.aborted) {
@@ -141,7 +153,12 @@
 			return;
 		}
 
-		if (!canAttend || attendanceSaving || attendanceLoading) {
+		if (
+			!session ||
+			!canAttend ||
+			attendanceSaving ||
+			attendanceLoading
+		) {
 			return;
 		}
 
@@ -174,7 +191,11 @@
 				);
 			}
 
-			if (!attendance.some((a) => a.sessionId === sessionId)) {
+			if (
+				!attendance.some(
+					(a) => a.sessionId === sessionId
+				)
+			) {
 				attendance = [
 					...attendance,
 					{
@@ -188,7 +209,9 @@
 		} catch (err) {
 			if (data.user?.email === accountEmail) {
 				attendanceError =
-					err.message || 'Something went wrong. Please try again.';
+					err instanceof Error
+						? err.message
+						: 'Something went wrong. Please try again.';
 			}
 		} finally {
 			if (data.user?.email === accountEmail) {
@@ -197,9 +220,16 @@
 		}
 	}
 
-	// PFA progress
+	// PFA progress.
 	const progress = $derived(
 		Math.min(100, (store.composite / store.target) * 100)
+	);
+
+	// Dynamic announcements from the server.
+	const announcements = $derived(
+		[...(data.announcements ?? [])].sort((a, b) =>
+			b.createdAt.localeCompare(a.createdAt)
+		)
 	);
 </script>
 
@@ -223,8 +253,13 @@
 <LoginModal bind:open={showLoginModal} {form} />
 
 <section class="welcome-title">
-	<h1>Good {greeting}{data.username ? `, ${data.username}` : ''}</h1>
-	<p class="muted">Current Time: {hours}:{minutes}:{seconds}</p>
+	<h1>
+		Good {greeting}{data.username ? `, ${data.username}` : ''}
+	</h1>
+
+	<p class="muted">
+		Current Time: {hours}:{minutes}:{seconds}
+	</p>
 </section>
 
 <!-- PT Session Card -->
@@ -313,7 +348,9 @@
 				onclick={markAttendance}
 				disabled={!canAttend || attendanceSaving}
 			>
-				{attendanceSaving ? 'Recording...' : 'Mark attended'}
+				{attendanceSaving
+					? 'Recording...'
+					: 'Mark attended'}
 			</button>
 
 			<p class="attendance-hint muted">
@@ -335,7 +372,10 @@
 
 	{:else}
 		<h2>No session scheduled</h2>
-		<p class="muted">Check the schedule for future PT sessions.</p>
+
+		<p class="muted">
+			Check the schedule for future PT sessions.
+		</p>
 	{/if}
 
 	<a href="/schedule" class="btn ghost schedule-link">
@@ -397,31 +437,111 @@
 					<span class="muted">{ev.label}</span>
 
 					<span class="value">
-						{formatValue(ev, store.latest.results[ev.id])}
+						{formatValue(
+							ev,
+							store.latest.results[ev.id]
+						)}
 					</span>
 				</li>
 			{/each}
 		</ul>
+
 	{:else}
 		<p class="muted">
-			Record an assessment on the Progress tab to see your results here.
+			Record an assessment on the Progress tab
+			to see your results here.
 		</p>
 	{/if}
 </section>
 
-<!-- Announcements -->
-<section class="card stack">
-	<p class="section-label">Announcements</p>
+<!-- Dynamic Announcements -->
+<section
+	class="card stack"
+	aria-labelledby="home-announcements-heading"
+>
+	<div class="row announcements-heading">
+		<h2
+			id="home-announcements-heading"
+			class="section-label"
+		>
+			Announcements
+		</h2>
 
-	{#each ANNOUNCEMENTS as group}
-		<div>
-			<h3>{formatDate(group.date)}</h3>
+		<span class="muted announcement-count">
+			{announcements.length}
+			{announcements.length === 1 ? 'update' : 'updates'}
+		</span>
+	</div>
 
-			<ul class="plain">
-				{#each group.items as item}
-					<li>{item}</li>
-				{/each}
-			</ul>
+	{#each announcements as a (a.id)}
+		<article
+			class="announcement"
+			class:important={a.priority === 'important'}
+		>
+			<div class="announcement-meta">
+				<span class="announcement-date">
+					<time datetime={a.date}>
+						{formatDate(a.date)}, {a.date.slice(0, 4)}
+					</time>
+
+					{#if a.updatedAt}
+						<span> — Edited</span>
+					{/if}
+				</span>
+
+				{#if a.priority === 'important'}
+					<span class="important-label">
+						<svg
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<circle cx="12" cy="12" r="10" />
+							<path d="M12 8v4M12 16h.01" />
+						</svg>
+
+						Important
+					</span>
+				{/if}
+			</div>
+
+			<h3 class="announcement-title">
+				{a.title}
+			</h3>
+
+			<p class="announcement-message">
+				{a.message}
+			</p>
+		</article>
+
+	{:else}
+		<div class="announcement-empty">
+			<svg
+				width="32"
+				height="32"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+				<path d="M10 21h4" />
+			</svg>
+
+			<h3>No announcements yet</h3>
+
+			<p class="muted">
+				New updates from administrators will appear here.
+			</p>
 		</div>
 	{/each}
 </section>
@@ -511,8 +631,90 @@
 		font-weight: 700;
 	}
 
-	.plain {
-		margin-top: var(--space-2);
+	/* Dynamic announcements */
+	.announcements-heading {
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+
+	.announcement-count {
+		font-size: 0.875rem;
+	}
+
+	.announcement {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-4);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-control);
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.announcement.important {
+		border-color: var(--color-accent);
+		border-left-width: 4px;
+	}
+
+	.announcement-meta {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+
+	.announcement-date {
 		color: var(--color-text-muted);
+		font-size: 0.8rem;
+	}
+
+	.important-label {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-1);
+		color: var(--color-accent);
+		font-weight: 600;
+		font-size: 0.8rem;
+	}
+
+	.important-label svg {
+		flex-shrink: 0;
+	}
+
+	.announcement-title {
+		color: var(--color-text);
+	}
+
+	.announcement-message {
+		color: var(--color-text-muted);
+		line-height: 1.5;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+
+	.announcement.important .announcement-message {
+		color: var(--color-text);
+	}
+
+	.announcement-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: var(--space-2);
+		padding: var(--space-5);
+	}
+
+	.announcement-empty svg {
+		color: var(--color-text-muted);
+	}
+
+	@media (max-width: 380px) {
+		.announcement {
+			padding: var(--space-3);
+		}
 	}
 </style>
