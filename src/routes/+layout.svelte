@@ -11,10 +11,11 @@
 	onMount(() => store.init());
 
 	const tabs = $derived([
-		{ href: '/', label: 'Home' },
-		{ href: '/log', label: 'Log' },
-		{ href: '/progress', label: 'Progress' },
-		...(data.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin' }] : [])
+    	{ href: '/', label: 'Home' },
+    	{ href: '/log', label: 'Log' },
+    	{ href: '/progress', label: 'Progress' },
+    	{ href: '/schedule', label: 'Schedule' },
+    	...(data.user?.role === 'admin' ? [{ href: '/admin', label: 'Admin' }] : [])
 	]);
 </script>
 
