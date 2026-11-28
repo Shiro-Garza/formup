@@ -6,6 +6,7 @@
 	import { store } from '#lib/store.svelte.js';
 	import {
 		EVENTS,
+		attendanceWindow,
 		formatValue,
 		formatDate,
 		nextSession,
@@ -80,16 +81,16 @@
 			: false
 	);
 
+	const sessionWindow = $derived(
+		session ? attendanceWindow(session) : null
+	);
+
 	const attendanceOpens = $derived(
-		session
-			? session.start.getTime() - 15 * 60 * 1000
-			: 0
+		sessionWindow?.opensAt ?? 0
 	);
 
 	const attendanceCloses = $derived(
-		session
-			? session.start.getTime() + 120 * 60 * 1000
-			: 0
+		sessionWindow?.closesAt ?? 0
 	);
 
 	const canAttend = $derived(
@@ -98,6 +99,47 @@
 		!attended &&
 		time.getTime() >= attendanceOpens &&
 		time.getTime() <= attendanceCloses
+	);
+
+	// Attendance history for the current cadet.
+	const attendanceHistory = $derived.by(() => {
+		const now = time.getTime();
+		const attendedIds = new Set(
+			attendance.map((a) => a.sessionId)
+		);
+
+		const past = data.sessions
+			.filter((s) => {
+				const start = new Date(
+					`${s.date}T${s.time}:00`
+				).getTime();
+
+				return Number.isFinite(start) && start <= now;
+			})
+			.sort((a, b) =>
+				`${a.date} ${a.time}`.localeCompare(
+					`${b.date} ${b.time}`
+				)
+			);
+
+		return {
+			total: past.length,
+			attended: past.filter((s) => attendedIds.has(s.id))
+				.length,
+			recent: past
+				.filter((s) => attendedIds.has(s.id))
+				.slice(-3)
+				.reverse()
+		};
+	});
+
+	const attendancePercent = $derived(
+		attendanceHistory.total
+			? Math.round(
+					(100 * attendanceHistory.attended) /
+						attendanceHistory.total
+				)
+			: 0
 	);
 
 	// Reload attendance whenever the account changes.
@@ -411,6 +453,69 @@
 		</a>
 	</section>
 
+	<!-- Cadet attendance history -->
+	{#if isCadet}
+		<section class="card stack">
+			<div class="row">
+				<p class="section-label">Attendance</p>
+
+				<span class="muted small">
+					{attendanceHistory.attended} of
+					{attendanceHistory.total} PT sessions
+				</span>
+			</div>
+
+			{#if attendanceLoading}
+
+				<p class="muted">Loading attendance...</p>
+
+			{:else if attendanceError}
+
+				<p class="error" role="alert">
+					{attendanceError}
+				</p>
+
+			{:else}
+
+				<div
+					class="bar"
+					role="progressbar"
+					aria-label="Attendance rate"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow={attendancePercent}
+				>
+					<span style:width={`${attendancePercent}%`}></span>
+				</div>
+
+				<p class="muted small">
+					{attendancePercent}% of past PT sessions attended.
+				</p>
+
+				{#if attendanceHistory.recent.length}
+					<ul class="attended-list">
+						{#each attendanceHistory.recent as s (s.id)}
+							<li class="row">
+								<span class="muted">
+									{formatDate(s.date)}
+								</span>
+
+								<span class="grow">{s.title}</span>
+
+								<span class="positive">Present</span>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="muted small">
+						No PT sessions attended yet. Check in from the PT
+						card when a session opens.
+					</p>
+				{/if}
+			{/if}
+		</section>
+	{/if}
+
 	<!-- PFA Record Card -->
 	<section class="card stack">
 		<div class="row">
@@ -645,6 +750,25 @@
 
 	.btn.done {
 		opacity: 1;
+	}
+
+	.attended-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 0.875rem;
+	}
+
+	.attended-list li {
+		min-height: var(--touch-target);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.attended-list li:last-child {
+		border-bottom: 0;
 	}
 
 	/* Schedule shortcut */

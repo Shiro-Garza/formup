@@ -6,6 +6,11 @@ import {
 	sortAnnouncements
 } from '#lib/server/db.js';
 import { getUsers } from '#lib/server/auth.js';
+import {
+	ATTENDANCE_EARLY_MINUTES,
+	EVENTS,
+	parseTime
+} from '#lib/events.js';
 
 // Require administrator access.
 function requireAdmin(locals) {
@@ -334,7 +339,8 @@ export const actions = {
 				return 'invalid';
 			}
 
-			const opensAt = start - 15 * 60 * 1000;
+			const opensAt =
+				start - ATTENDANCE_EARLY_MINUTES * 60 * 1000;
 
 			if (Date.now() < opensAt) {
 				return 'early';
@@ -569,6 +575,140 @@ export const actions = {
 			ok: true,
 			section: 'announcements',
 			success: 'Announcement deleted successfully.'
+		};
+	},
+
+	// =====================================
+	// CADET PFA MANAGEMENT
+	// =====================================
+
+	// Record a PFA assessment on behalf of a cadet.
+	recordAttempt: async ({ request, locals }) => {
+		requireAdmin(locals);
+
+		const form = await request.formData();
+
+		const email = form
+			.get('email')
+			?.toString()
+			.trim()
+			.toLowerCase();
+
+		const date = form.get('date')?.toString() ?? '';
+
+		if (!email) {
+			return fail(400, {
+				section: 'pfa',
+				message: 'Select a cadet.'
+			});
+		}
+
+		const parsedDate = new Date(`${date}T00:00:00Z`);
+
+		if (
+			Number.isNaN(parsedDate.getTime()) ||
+			parsedDate.toISOString().slice(0, 10) !== date
+		) {
+			return fail(400, {
+				section: 'pfa',
+				message: 'Enter a valid assessment date.'
+			});
+		}
+
+		if (date > localDate()) {
+			return fail(400, {
+				section: 'pfa',
+				message: 'Assessment dates cannot be in the future.'
+			});
+		}
+
+		const users = await getUsers();
+
+		const cadet = users.find(
+			(u) =>
+				u.email === email && u.role !== 'admin'
+		);
+
+		if (!cadet) {
+			return fail(404, {
+				section: 'pfa',
+				message: 'Cadet not found.'
+			});
+		}
+
+		// Parse every event result from the form.
+		const results = {};
+
+		for (const event of EVENTS) {
+			const raw = String(
+				form.get(event.id) ?? ''
+			).trim();
+
+			const value =
+				event.kind === 'time'
+					? parseTime(raw)
+					: Number(raw);
+
+			if (
+				value === null ||
+				!Number.isFinite(value) ||
+				value <= 0 ||
+				value > 100000
+			) {
+				return fail(400, {
+					section: 'pfa',
+					message: `Enter a valid result for ${event.label}.`
+				});
+			}
+
+			if (
+				event.kind !== 'time' &&
+				!Number.isInteger(value)
+			) {
+				return fail(400, {
+					section: 'pfa',
+					message: `${event.label} must be a whole number.`
+				});
+			}
+
+			results[event.id] = value;
+		}
+
+		const duplicate = await update((db) => {
+			db.attempts ??= [];
+
+			const existing = db.attempts.find(
+				(a) =>
+					a.email?.trim().toLowerCase() === email &&
+					a.date === date &&
+					EVENTS.every(
+						(e) =>
+							Number(a.results?.[e.id]) ===
+							results[e.id]
+					)
+			);
+
+			if (existing) return true;
+
+			db.attempts.push({
+				id: crypto.randomUUID(),
+				email,
+				date,
+				results,
+				createdAt: new Date().toISOString(),
+				updatedAt: null,
+				recordedBy: locals.user.email
+			});
+
+			return false;
+		});
+
+		return {
+			ok: true,
+			section: 'pfa',
+			success: duplicate
+				? 'That assessment is already recorded.'
+				: 'Cadet assessment recorded successfully.'
 		};
 	}
 };

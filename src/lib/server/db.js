@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { SCHEDULE, ANNOUNCEMENTS } from '../events.js';
 
-// JSON-file database for PT sessions, PFA attempts,
+// JSON-file database for PT sessions, PFA attempts, workouts,
 // attendance records, and announcements.
 const FILE = path.resolve('data/db.json');
 
@@ -53,6 +53,7 @@ function seed() {
 	return {
 		sessions,
 		attempts: [],
+		workouts: [],
 		attendance: [],
 		announcements: seedAnnouncements()
 	};
@@ -66,6 +67,10 @@ function normalize(db) {
 
 	if (!Array.isArray(db.attempts)) {
 		db.attempts = [];
+	}
+
+	if (!Array.isArray(db.workouts)) {
+		db.workouts = [];
 	}
 
 	if (!Array.isArray(db.attendance)) {

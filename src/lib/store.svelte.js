@@ -20,7 +20,6 @@ class FormUpStore {
 	workouts = $state([]);
 	attempts = $state([]);
 	target = $state(100);
-	attended = $state([]);
 
 	activeAccount = $state(null);
 	initialized = $state(false);
@@ -30,7 +29,12 @@ class FormUpStore {
 	syncError = $state('');
 	savingAttempt = $state(false);
 
+	syncingWorkouts = $state(false);
+	workoutError = $state('');
+	savingWorkout = $state(false);
+
 	syncController = null;
+	workoutController = null;
 	accountVersion = 0;
 
 	// PFA calculations.
@@ -87,11 +91,14 @@ class FormUpStore {
 			: [];
 
 		this.target = 100;
-		this.attended = [];
 
 		this.syncing = false;
 		this.syncError = '';
 		this.savingAttempt = false;
+
+		this.syncingWorkouts = false;
+		this.workoutError = '';
+		this.savingWorkout = false;
 	}
 
 	// Load the active account.
@@ -110,6 +117,9 @@ class FormUpStore {
 		// Cancel synchronization from the previous account.
 		this.syncController?.abort();
 		this.syncController = null;
+
+		this.workoutController?.abort();
+		this.workoutController = null;
 
 		// Invalidate requests belonging to the old account.
 		this.accountVersion += 1;
@@ -157,18 +167,34 @@ class FormUpStore {
 					this.target = saved.target;
 				}
 
-				if (Array.isArray(saved.attended)) {
-					this.attended = saved.attended;
-				}
 			}
 
 		} catch {
 			// Ignore corrupt or unavailable browser storage.
 		}
 
+		// Move workouts logged before signing in into this account.
+		if (account !== 'guest') {
+			const claimed = this.takeGuestWorkouts();
+
+			if (claimed.length) {
+				if (account.startsWith('cadet:')) {
+					void this.uploadWorkouts(claimed);
+				} else {
+					this.workouts = this.mergeWorkouts(
+						this.workouts,
+						claimed
+					);
+
+					this.save();
+				}
+			}
+		}
+
 		// Automatically retrieve the cadet's server records.
 		if (account.startsWith('cadet:')) {
 			void this.syncAttempts();
+			void this.syncWorkouts();
 		}
 	}
 
@@ -186,7 +212,13 @@ class FormUpStore {
 			localStorage.setItem(
 				KEY_PREFIX + this.activeAccount,
 				JSON.stringify({
-					workouts: this.workouts,
+					// The server is the source of truth for
+					// authenticated cadet workouts too.
+					workouts: this.activeAccount.startsWith(
+						'cadet:'
+					)
+						? []
+						: this.workouts,
 
 					// The server is the source of truth
 					// for authenticated cadet assessments.
@@ -194,8 +226,7 @@ class FormUpStore {
 						? []
 						: this.attempts,
 
-					target: this.target,
-					attended: this.attended
+					target: this.target
 				})
 			);
 
@@ -304,26 +335,303 @@ class FormUpStore {
 		}
 	}
 
-	// Add a workout.
-	addWorkout(workout) {
-		this.workouts = [
+	// Merge workout lists without duplicating ids.
+	mergeWorkouts(current, incoming) {
+		const byId = new Map();
+
+		for (const workout of [...current, ...incoming]) {
+			if (workout?.id) byId.set(workout.id, workout);
+		}
+
+		return [...byId.values()].sort(byDateDesc);
+	}
+
+	// Move workouts logged before signing in out of the guest bucket.
+	takeGuestWorkouts() {
+		if (!browser) return [];
+
+		try {
+			const raw = localStorage.getItem(
+				KEY_PREFIX + 'guest'
+			);
+
+			if (!raw) return [];
+
+			const saved = JSON.parse(raw);
+			const workouts = Array.isArray(saved.workouts)
+				? saved.workouts
+				: [];
+
+			const seedIds = new Set(
+				SEED_WORKOUTS.map((w) => w.id)
+			);
+
+			// Demo data is not worth carrying into a real account.
+			const claimed = workouts.filter(
+				(w) => w?.id && !seedIds.has(w.id)
+			);
+
+			if (!claimed.length) return [];
+
+			localStorage.setItem(
+				KEY_PREFIX + 'guest',
+				JSON.stringify({
+					...saved,
+					workouts: workouts.filter((w) =>
+						seedIds.has(w.id)
+					)
+				})
+			);
+
+			return claimed;
+
+		} catch {
+			return [];
+		}
+	}
+
+	// Upload workouts claimed from the guest session.
+	async uploadWorkouts(workouts) {
+		for (const workout of workouts) {
+			const response = await fetch('/api/workouts', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(workout)
+			}).catch(() => null);
+
+			if (!response?.ok) return;
+		}
+
+		await this.syncWorkouts();
+	}
+
+	// Save a workout. Cadets store workouts on the server.
+	async submitWorkout(workout) {
+		if (!browser || !this.initialized) {
+			throw new Error(
+				'Fitness records are not ready yet.'
+			);
+		}
+
+		// Guests and administrators keep workouts on this device.
+		if (!this.isCadet) {
+			this.addLocalWorkout(workout);
+			return true;
+		}
+
+		if (this.savingWorkout) {
+			return false;
+		}
+
+		const account = this.activeAccount;
+		const version = this.accountVersion;
+
+		this.savingWorkout = true;
+		this.workoutError = '';
+
+		try {
+			const response = await fetch('/api/workouts', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(workout)
+			});
+
+			const result = await response
+				.json()
+				.catch(() => null);
+
+			if (
+				this.activeAccount !== account ||
+				this.accountVersion !== version
+			) {
+				return false;
+			}
+
+			if (!response.ok || !result?.workout?.id) {
+				throw new Error(
+					result?.message ||
+						'Unable to save the workout.'
+				);
+			}
+
+			// Use the server-generated ID.
+			this.workouts = this.mergeWorkouts(
+				this.workouts,
+				[result.workout]
+			);
+
+			return true;
+
+		} catch (err) {
+			if (
+				this.activeAccount === account &&
+				this.accountVersion === version
+			) {
+				this.workoutError =
+					err instanceof Error
+						? err.message
+						: 'Unable to save the workout.';
+
+				throw err;
+			}
+
+			return false;
+
+		} finally {
+			if (
+				this.activeAccount === account &&
+				this.accountVersion === version
+			) {
+				this.savingWorkout = false;
+			}
+		}
+	}
+
+	// Save a workout on this device only.
+	addLocalWorkout(workout) {
+		this.workouts = this.mergeWorkouts(this.workouts, [
 			{
 				id: crypto.randomUUID(),
+				createdAt: new Date().toISOString(),
 				...workout
-			},
-			...this.workouts
-		].sort(byDateDesc);
+			}
+		]);
 
 		this.save();
 	}
 
-	// Delete a workout.
-	deleteWorkout(id) {
-		this.workouts = this.workouts.filter(
-			(w) => w.id !== id
-		);
+	// Retrieve the current cadet's workouts.
+	async syncWorkouts() {
+		if (
+			!browser ||
+			!this.initialized ||
+			!this.isCadet ||
+			this.savingWorkout
+		) {
+			return false;
+		}
 
-		this.save();
+		this.workoutController?.abort();
+
+		const controller = new AbortController();
+		this.workoutController = controller;
+
+		const account = this.activeAccount;
+		const version = this.accountVersion;
+
+		this.syncingWorkouts = true;
+		this.workoutError = '';
+
+		try {
+			const response = await fetch('/api/workouts', {
+				method: 'GET',
+				cache: 'no-store',
+				signal: controller.signal
+			});
+
+			if (!response.ok) {
+				throw new Error(
+					'Unable to retrieve workouts.'
+				);
+			}
+
+			const result = await response.json();
+
+			if (
+				controller.signal.aborted ||
+				this.activeAccount !== account ||
+				this.accountVersion !== version
+			) {
+				return false;
+			}
+
+			if (!Array.isArray(result.workouts)) {
+				throw new Error(
+					'Invalid workout data received.'
+				);
+			}
+
+			this.workouts = this.mergeWorkouts(
+				this.workouts,
+				result.workouts
+			);
+
+			return true;
+
+		} catch (err) {
+			if (
+				!controller.signal.aborted &&
+				this.activeAccount === account &&
+				this.accountVersion === version
+			) {
+				this.workoutError =
+					err instanceof Error
+						? err.message
+						: 'Unable to synchronize workouts.';
+			}
+
+			return false;
+
+		} finally {
+			if (
+				this.workoutController === controller &&
+				this.accountVersion === version
+			) {
+				this.workoutController = null;
+				this.syncingWorkouts = false;
+			}
+		}
+	}
+
+	// Delete a workout.
+	async deleteWorkout(id) {
+		if (!browser) return false;
+
+		if (!this.isCadet) {
+			this.workouts = this.workouts.filter(
+				(w) => w.id !== id
+			);
+
+			this.save();
+
+			return true;
+		}
+
+		try {
+			const response = await fetch(
+				`/api/workouts?id=${encodeURIComponent(id)}`,
+				{ method: 'DELETE' }
+			);
+
+			const result = await response
+				.json()
+				.catch(() => null);
+
+			if (!response.ok) {
+				throw new Error(
+					result?.message ||
+						'Unable to delete the workout.'
+				);
+			}
+
+			this.workouts = this.workouts.filter(
+				(w) => w.id !== id
+			);
+
+			return true;
+
+		} catch (err) {
+			this.workoutError =
+				err instanceof Error
+					? err.message
+					: 'Unable to delete the workout.';
+
+			return false;
+		}
 	}
 
 	// Save guest assessments locally.
@@ -456,6 +764,174 @@ class FormUpStore {
 		}
 	}
 
+	// Update a saved assessment.
+	async updateAttempt(id, attempt) {
+		if (!browser || !this.initialized) {
+			throw new Error(
+				'Fitness records are not ready yet.'
+			);
+		}
+
+		if (this.isAdmin) {
+			throw new Error(
+				'Administrators cannot change cadet assessments.'
+			);
+		}
+
+		// Guest assessments stay on this device.
+		if (!this.isCadet) {
+			if (!this.attempts.some((a) => a.id === id)) {
+				return false;
+			}
+
+			this.attempts = this.attempts
+				.map((a) =>
+					a.id === id
+						? {
+							...a,
+							date: attempt.date,
+							results: attempt.results,
+							updatedAt: new Date().toISOString()
+						}
+						: a
+				)
+				.sort(byDateAsc);
+
+			this.save();
+
+			return true;
+		}
+
+		if (this.savingAttempt) {
+			return false;
+		}
+
+		const account = this.activeAccount;
+		const version = this.accountVersion;
+
+		this.savingAttempt = true;
+		this.syncError = '';
+
+		try {
+			const response = await fetch(
+				`/api/attempts/${encodeURIComponent(id)}`,
+				{
+					method: 'PATCH',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify(attempt)
+				}
+			);
+
+			const result = await response
+				.json()
+				.catch(() => null);
+
+			if (
+				this.activeAccount !== account ||
+				this.accountVersion !== version
+			) {
+				return false;
+			}
+
+			if (!response.ok || !result?.attempt?.id) {
+				throw new Error(
+					result?.message ||
+						'Unable to update the assessment.'
+				);
+			}
+
+			this.attempts = this.attempts
+				.map((a) =>
+					a.id === id ? result.attempt : a
+				)
+				.sort(byDateAsc);
+
+			return true;
+
+		} catch (err) {
+			if (
+				this.activeAccount === account &&
+				this.accountVersion === version
+			) {
+				this.syncError =
+					err instanceof Error
+						? err.message
+						: 'Unable to update the assessment.';
+
+				throw err;
+			}
+
+			return false;
+
+		} finally {
+			if (
+				this.activeAccount === account &&
+				this.accountVersion === version
+			) {
+				this.savingAttempt = false;
+			}
+		}
+	}
+
+	// Remove a saved assessment.
+	async deleteAttempt(id) {
+		if (!browser || !this.initialized) {
+			throw new Error(
+				'Fitness records are not ready yet.'
+			);
+		}
+
+		if (this.isAdmin) {
+			throw new Error(
+				'Administrators cannot change cadet assessments.'
+			);
+		}
+
+		if (!this.isCadet) {
+			this.attempts = this.attempts.filter(
+				(a) => a.id !== id
+			);
+
+			this.save();
+
+			return true;
+		}
+
+		try {
+			const response = await fetch(
+				`/api/attempts/${encodeURIComponent(id)}`,
+				{ method: 'DELETE' }
+			);
+
+			const result = await response
+				.json()
+				.catch(() => null);
+
+			if (!response.ok) {
+				throw new Error(
+					result?.message ||
+						'Unable to delete the assessment.'
+				);
+			}
+
+			this.attempts = this.attempts.filter(
+				(a) => a.id !== id
+			);
+
+			return true;
+
+		} catch (err) {
+			this.syncError =
+				err instanceof Error
+					? err.message
+					: 'Unable to delete the assessment.';
+
+			return false;
+		}
+	}
+
 	// Update the personal fitness target.
 	setTarget(value) {
 		if (
@@ -471,19 +947,6 @@ class FormUpStore {
 		this.save();
 	}
 
-	// Legacy attendance helpers.
-	// Actual PT check-in is handled by the server API.
-	isAttended(key) {
-		return this.attended.includes(key);
-	}
-
-	toggleAttended(key) {
-		this.attended = this.isAttended(key)
-			? this.attended.filter((k) => k !== key)
-			: [...this.attended, key];
-
-		this.save();
-	}
 }
 
 export const store = new FormUpStore();

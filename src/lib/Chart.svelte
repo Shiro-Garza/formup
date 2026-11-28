@@ -1,7 +1,11 @@
 <script>
 	// Simple SVG trend chart with a dashed goal line.
 	// "better" decides direction: for 'lower' (e.g. run time) the axis is flipped so up always means improving.
-	let { points, goal, better = 'higher', format = (v) => String(v), label = 'Trend chart' } = $props();
+	let { points, goal = null, better = 'higher', format = (v) => String(v), label = 'Trend chart' } = $props();
+
+	const hasGoal = $derived(
+		typeof goal === 'number' && Number.isFinite(goal)
+	);
 
 	const W = 320;
 	const H = 190;
@@ -11,7 +15,10 @@
 	const PB = 28;
 
 	const range = $derived.by(() => {
-		const vals = [...points.map((p) => p.value), goal];
+		const vals = [
+			...points.map((p) => p.value),
+			...(hasGoal ? [goal] : [])
+		];
 		const min = Math.min(...vals);
 		const max = Math.max(...vals);
 		const pad = (max - min || 1) * 0.2;
@@ -33,8 +40,10 @@
 </script>
 
 <svg viewBox="0 0 {W} {H}" role="img" aria-label={label}>
-	<line class="goal" x1={PL} x2={W - PR} y1={y(goal)} y2={y(goal)} />
-	<text class="goal-label" x={W - PR} y={y(goal) - 6} text-anchor="end">Goal {format(goal)}</text>
+	{#if hasGoal}
+		<line class="goal" x1={PL} x2={W - PR} y1={y(goal)} y2={y(goal)} />
+		<text class="goal-label" x={W - PR} y={y(goal) - 6} text-anchor="end">Goal {format(goal)}</text>
+	{/if}
 
 	{#if points.length > 1}
 		<path class="line" d={path} />

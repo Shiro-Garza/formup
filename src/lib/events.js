@@ -22,12 +22,12 @@ export const EVENTS = [
 		focus: 'Do 3 sets close to failure twice a week.'
 	},
 	{
-		id: 'plank',
-		label: 'Plank',
-		kind: 'time',
+		id: 'situps',
+		label: 'Sit-ups',
+		kind: 'reps',
 		better: 'higher',
-		best: 75, // seconds = 100 points
-		focus: 'Hold 3 x 45 s with short rests and add 5 s each week.'
+		best: 60, // reps = 100 points
+		focus: 'Do 3 sets of timed sit-up intervals twice a week.'
 	}
 ];
 
@@ -67,7 +67,14 @@ export function parseTime(text) {
 }
 
 export function formatValue(event, value) {
-	return event.kind === 'time' ? formatTime(value) : String(value);
+	const numeric = Number(value);
+
+	// Legacy or partial records may not include every event.
+	if (!Number.isFinite(numeric) || numeric <= 0) return '—';
+
+	return event.kind === 'time'
+		? formatTime(numeric)
+		: String(numeric);
 }
 
 export function eventScore(event, value) {
@@ -76,8 +83,31 @@ export function eventScore(event, value) {
 }
 
 export function compositeScore(results) {
-	const scores = EVENTS.map((e) => eventScore(e, results[e.id]));
-	return scores.reduce((a, b) => a + b, 0) / scores.length;
+	// Score only the events a record actually contains.
+	const scores = EVENTS.filter(
+		(e) => Number(results?.[e.id]) > 0
+	).map((e) => eventScore(e, Number(results[e.id])));
+
+	return scores.length
+		? scores.reduce((a, b) => a + b, 0) / scores.length
+		: 0;
+}
+
+// Shared PT attendance check-in window.
+export const ATTENDANCE_EARLY_MINUTES = 15;
+export const ATTENDANCE_LATE_MINUTES = 120;
+
+// Resolve a session's start time and its check-in window.
+export function attendanceWindow(session) {
+	const start = new Date(`${session.date}T${session.time}:00`).getTime();
+
+	if (Number.isNaN(start)) return null;
+
+	return {
+		start,
+		opensAt: start - ATTENDANCE_EARLY_MINUTES * 60 * 1000,
+		closesAt: start + ATTENDANCE_LATE_MINUTES * 60 * 1000
+	};
 }
 
 export function todayISO(d = new Date()) {
@@ -138,7 +168,7 @@ export const SEED_WORKOUTS = [
 ];
 
 export const SEED_ATTEMPTS = [
-	{ id: 'a1', date: '2026-08-20', results: { run: 780, pushups: 31, plank: 45 } },
-	{ id: 'a2', date: '2026-09-22', results: { run: 745, pushups: 36, plank: 54 } },
-	{ id: 'a3', date: '2026-10-26', results: { run: 730, pushups: 39, plank: 58 } }
+	{ id: 'a1', date: '2026-08-20', results: { run: 780, pushups: 31, situps: 44 } },
+	{ id: 'a2', date: '2026-09-22', results: { run: 745, pushups: 36, situps: 50 } },
+	{ id: 'a3', date: '2026-10-26', results: { run: 730, pushups: 39, situps: 55 } }
 ];

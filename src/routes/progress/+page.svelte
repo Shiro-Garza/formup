@@ -2,9 +2,13 @@
 	import { store } from '#lib/store.svelte.js';
 	import Chart from '#lib/Chart.svelte';
 	import {
+		ACTIVITIES,
 		EVENTS,
+		activityById,
+		compositeScore,
 		eventById,
 		eventScore,
+		formatTime,
 		formatValue,
 		formatDate,
 		parseTime,
@@ -19,32 +23,88 @@
 	const ev = $derived(eventById(selected));
 
 	const points = $derived(
-		store.attempts.map((a) => ({
-			label: formatDate(a.date),
-			value: a.results[selected]
-		}))
+		store.attempts
+			.filter((a) => Number(a.results[selected]) > 0)
+			.map((a) => ({
+				label: formatDate(a.date),
+				value: Number(a.results[selected])
+			}))
 	);
+
+	// Chart event selection for logged workouts.
+	let workoutActivity = $state('run');
+
+	const workoutEvent = $derived(eventById(workoutActivity));
+
+	const workoutPoints = $derived(
+		[...store.workouts]
+			.filter((w) => w.activity === workoutActivity)
+			.sort((a, b) => a.date.localeCompare(b.date))
+			.map((w) => ({
+				label: formatDate(w.date),
+				value: workoutMetric(w)
+			}))
+	);
+
+	// Runs are compared by pace per mile; other events by their raw result.
+	const workoutGoal = $derived(
+		workoutActivity === 'run'
+			? Math.round(workoutEvent.best / 2)
+			: workoutEvent?.best ?? null
+	);
+
+	function workoutMetric(w) {
+		if (w.activity === 'run') {
+			const distance = Number(w.distance) || 0;
+
+			return distance > 0
+				? w.seconds / distance
+				: w.seconds;
+		}
+
+		if (w.activity === 'plank') return w.seconds;
+
+		return w.reps;
+	}
+
+	function workoutFormat(value) {
+		if (workoutActivity === 'run') {
+			return `${formatTime(Math.round(value))}/mi`;
+		}
+
+		if (workoutActivity === 'plank') {
+			return formatTime(Math.round(value));
+		}
+
+		return `${Math.round(value)} reps`;
+	}
 
 	// Calculate standings from the latest assessment.
 	const standings = $derived(
 		store.latest
 			? EVENTS.map((e) => {
-				const values = store.attempts.map(
-					(a) => a.results[e.id]
-				);
+				// Ignore legacy records that predate this event.
+				const values = store.attempts
+					.map((a) => Number(a.results[e.id]))
+					.filter((v) => Number.isFinite(v) && v > 0);
 
-				const best =
-					e.better === 'lower'
+				const best = values.length
+					? e.better === 'lower'
 						? Math.min(...values)
-						: Math.max(...values);
+						: Math.max(...values)
+					: null;
+
+				const value = Number(
+					store.latest.results[e.id]
+				);
 
 				return {
 					event: e,
-					value: store.latest.results[e.id],
-					score: eventScore(
-						e,
-						store.latest.results[e.id]
-					),
+					value,
+					score:
+						Number.isFinite(value) && value > 0
+							? eventScore(e, value)
+							: 0,
 					best
 				};
 			})
@@ -63,10 +123,13 @@
 	// Assessment form state.
 	let attemptDate = $state(todayISO());
 
+	// Assessment currently being edited, if any.
+	let editingId = $state(null);
+
 	let inputs = $state({
 		run: '',
 		pushups: '',
-		plank: ''
+		situps: ''
 	});
 
 	let error = $state('');
@@ -90,12 +153,13 @@
 	$effect(() => {
 		const account = data.user?.email;
 
+		editingId = null;
 		attemptDate = todayISO();
 
 		inputs = {
 			run: '',
 			pushups: '',
-			plank: ''
+			situps: ''
 		};
 
 		error = '';
@@ -195,17 +259,22 @@
 
 		const account = store.activeAccount;
 		const version = store.accountVersion;
+		const wasEditing = editingId;
 
 		submitting = true;
 
 		try {
-			// Use the centralized submission function.
-			// Cadet assessments are saved on the server.
-			// Guest assessments remain local.
-			const saved = await store.submitAttempt({
-				date: attemptDate,
-				results
-			});
+			// Editing updates the existing record; otherwise a new
+			// assessment is created (server-side for cadets).
+			const saved = wasEditing
+				? await store.updateAttempt(wasEditing, {
+						date: attemptDate,
+						results
+					})
+				: await store.submitAttempt({
+						date: attemptDate,
+						results
+					});
 
 			// Ignore responses from a previous account.
 			if (
@@ -225,12 +294,16 @@
 			inputs = {
 				run: '',
 				pushups: '',
-				plank: ''
+				situps: ''
 			};
 
-			success = isCadet
-				? 'Assessment saved and synchronized successfully.'
-				: 'Assessment saved on this device.';
+			editingId = null;
+
+			success = wasEditing
+				? 'Assessment updated successfully.'
+				: isCadet
+					? 'Assessment saved and synchronized successfully.'
+					: 'Assessment saved on this device.';
 
 		} catch (err) {
 			if (
@@ -250,6 +323,79 @@
 			) {
 				submitting = false;
 			}
+		}
+	}
+
+	// Load a saved assessment into the form for editing.
+	function startEdit(attempt) {
+		editingId = attempt.id;
+		attemptDate = attempt.date;
+
+		inputs = Object.fromEntries(
+			EVENTS.map((event) => [
+				event.id,
+				event.kind === 'time'
+					? formatValue(
+							event,
+							attempt.results[event.id]
+						)
+					: String(attempt.results[event.id])
+			])
+		);
+
+		error = '';
+		success = '';
+	}
+
+	// Leave editing mode and clear the form.
+	function cancelEdit() {
+		editingId = null;
+		attemptDate = todayISO();
+
+		inputs = {
+			run: '',
+			pushups: '',
+			situps: ''
+		};
+
+		error = '';
+		success = '';
+	}
+
+	// Delete a saved assessment after confirmation.
+	async function removeAttempt(attempt) {
+		if (
+			!window.confirm(
+				`Delete the assessment from ${formatDate(attempt.date)}?`
+			)
+		) {
+			return;
+		}
+
+		error = '';
+
+		try {
+			const removed = await store.deleteAttempt(
+				attempt.id
+			);
+
+			if (removed) {
+				if (editingId === attempt.id) {
+					cancelEdit();
+				}
+
+				success = 'Assessment deleted.';
+			} else {
+				error =
+					store.syncError ||
+					'Unable to delete the assessment.';
+			}
+
+		} catch (err) {
+			error =
+				err instanceof Error
+					? err.message
+					: 'Unable to delete the assessment.';
 		}
 	}
 
@@ -425,6 +571,82 @@
 	{/if}
 </section>
 
+<!-- Logged workout chart -->
+<section class="card stack">
+	<div class="row">
+		<p class="section-label">Training log</p>
+
+		<span class="muted small">
+			{store.workouts.length}
+			{store.workouts.length === 1 ? 'workout' : 'workouts'}
+			logged
+		</span>
+	</div>
+
+	<div class="chips" role="group" aria-label="Workout activity">
+		{#each ACTIVITIES as a}
+			<button
+				class="chip"
+				aria-pressed={workoutActivity === a.id}
+				onclick={() => (workoutActivity = a.id)}
+			>
+				{a.label}
+			</button>
+		{/each}
+	</div>
+
+	{#if store.syncingWorkouts}
+
+		<div class="empty-state">
+			<span class="spinner" aria-hidden="true"></span>
+
+			<p class="muted">Loading workouts...</p>
+		</div>
+
+	{:else if workoutPoints.length}
+
+		<Chart
+			points={workoutPoints}
+			goal={workoutGoal}
+			better={workoutActivity === 'run' ? 'lower' : 'higher'}
+			format={workoutFormat}
+			label={`${activityById(workoutActivity).label} workouts over time`}
+		/>
+
+		<p class="muted small">
+			{#if workoutActivity === 'run'}
+				Run values are pace per mile, calculated from the
+				distance and time you log.
+			{:else if workoutActivity === 'plank'}
+				Plank is a training activity, not a scored PFA event.
+			{:else}
+				Workouts logged on the Log tab appear here automatically.
+			{/if}
+		</p>
+
+		{#if store.workoutError}
+			<p class="error" role="alert">{store.workoutError}</p>
+		{/if}
+
+	{:else}
+
+		<div class="empty-state">
+			<h3>
+				No {activityById(
+					workoutActivity
+				).label.toLowerCase()} workouts yet
+			</h3>
+
+			<p class="muted">
+				Log a workout to see it appear on this chart.
+			</p>
+
+			<a class="btn ghost" href="/log">Log a workout</a>
+		</div>
+
+	{/if}
+</section>
+
 <!-- Latest event standings -->
 <section class="card stack">
 	<p class="section-label">Standings</p>
@@ -495,6 +717,80 @@
 	{/if}
 </section>
 
+<!-- Assessment history -->
+<section class="card stack">
+	<p class="section-label">Assessment history</p>
+
+	{#if !accountReady}
+
+		<p class="muted">Loading assessment history...</p>
+
+	{:else if store.attempts.length === 0}
+
+		<p class="muted">No assessments recorded yet.</p>
+
+	{:else}
+
+		<ul class="history">
+			{#each [...store.attempts].reverse() as a (a.id)}
+				<li>
+					<div class="row">
+						<span class="muted date">
+							{formatDate(a.date)}, {a.date.slice(0, 4)}
+
+							{#if a.updatedAt}
+								<span> · edited</span>
+							{/if}
+						</span>
+
+						<span class="grow"></span>
+
+						<span class="history-score">
+							{compositeScore(a.results).toFixed(1)}
+						</span>
+
+						<button
+							class="btn ghost small-btn"
+							type="button"
+							onclick={() => startEdit(a)}
+							disabled={submitting ||
+								store.savingAttempt ||
+								store.syncing}
+						>
+							Edit
+						</button>
+
+						<button
+							class="del"
+							type="button"
+							aria-label={`Delete assessment from ${formatDate(
+								a.date
+							)}`}
+							onclick={() => removeAttempt(a)}
+							disabled={submitting ||
+								store.savingAttempt ||
+								store.syncing}
+						>
+							&times;
+						</button>
+					</div>
+
+					<p class="muted small">
+						{EVENTS.map(
+							(e) =>
+								`${e.label}: ${formatValue(
+									e,
+									a.results[e.id]
+								)}`
+						).join(' · ')}
+					</p>
+				</li>
+			{/each}
+		</ul>
+
+	{/if}
+</section>
+
 <!-- Record a new assessment -->
 {#if isAdmin}
 
@@ -518,7 +814,7 @@
 		class="card stack"
 		onsubmit={recordAttempt}
 	>
-		<h2>Record an assessment</h2>
+		<h2>{editingId ? 'Edit assessment' : 'Record an assessment'}</h2>
 
 		{#if isCadet}
 
@@ -636,10 +932,21 @@
 
 			{:else}
 
-				Save attempt
+				{editingId ? 'Save changes' : 'Save attempt'}
 
 			{/if}
 		</button>
+
+		{#if editingId}
+			<button
+				class="btn ghost"
+				type="button"
+				onclick={cancelEdit}
+				disabled={submitting || store.savingAttempt}
+			>
+				Cancel edit
+			</button>
+		{/if}
 	</form>
 
 	<!-- Personal fitness target -->
@@ -785,6 +1092,52 @@
 	:global([data-theme='light']) .error-feedback {
 		color: var(--color-error, #b42318);
 		border-color: var(--color-error, #b42318);
+	}
+
+	/* Assessment history */
+
+	.history {
+		display: flex;
+		flex-direction: column;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.history li {
+		padding: var(--space-2) 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.history li:last-child {
+		border-bottom: 0;
+	}
+
+	.history-score {
+		font-family: var(--font-display);
+		font-size: 1.1rem;
+		font-weight: 700;
+	}
+
+	.small-btn {
+		min-height: var(--touch-target);
+		padding: 0 var(--space-3);
+		font-size: 0.8rem;
+	}
+
+	.history .del {
+		min-width: var(--touch-target);
+		min-height: var(--touch-target);
+		border: 0;
+		background: none;
+		color: var(--color-text-muted);
+		font-size: 1.5rem;
+		cursor: pointer;
+	}
+
+	.history .del:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
 	}
 
 	/* Save button */

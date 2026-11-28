@@ -1,17 +1,7 @@
-
 import { error, json } from '@sveltejs/kit';
 import { getDb, update } from '#lib/server/db.js';
 import { EVENTS } from '#lib/events.js';
-
-// Return assessment information without exposing account data.
-function publicAttempt(attempt) {
-	return {
-		id: attempt.id,
-		date: attempt.date,
-		results: attempt.results,
-		createdAt: attempt.createdAt
-	};
-}
+import { publicAttempt, readAttempt } from '#lib/server/attempts.js';
 
 // Retrieve the logged-in cadet's assessment history.
 export async function GET({ locals }) {
@@ -68,65 +58,9 @@ export async function POST({ request, locals }) {
 
 	const email = locals.user.email.trim().toLowerCase();
 
-	const body = await request.json().catch(() => null);
-
-	const date = body?.date;
-
-	// Validate the assessment date.
-	if (
-		typeof date !== 'string' ||
-		!/^\d{4}-\d{2}-\d{2}$/.test(date)
-	) {
-		error(400, 'Invalid date.');
-	}
-
-	const parsedDate = new Date(
-		`${date}T00:00:00Z`
+	const { date, results } = readAttempt(
+		await request.json().catch(() => null)
 	);
-
-	if (
-		Number.isNaN(parsedDate.getTime()) ||
-		parsedDate.toISOString().slice(0, 10) !== date
-	) {
-		error(400, 'Enter a valid assessment date.');
-	}
-
-	// Validate individual event results.
-	const results = {};
-
-	for (const e of EVENTS) {
-		const raw = body?.results?.[e.id];
-
-		if (
-			typeof raw !== 'number' &&
-			typeof raw !== 'string'
-		) {
-			error(400, `Invalid result for ${e.label}.`);
-		}
-
-		const value = Number(raw);
-
-		if (
-			!Number.isFinite(value) ||
-			value <= 0 ||
-			value > 100000
-		) {
-			error(400, `Invalid result for ${e.label}.`);
-		}
-
-		// Repetition-based events must use whole numbers.
-		if (
-			e.kind !== 'time' &&
-			!Number.isInteger(value)
-		) {
-			error(
-				400,
-				`${e.label} must be a whole number.`
-			);
-		}
-
-		results[e.id] = value;
-	}
 
 	// Check for duplicates and save inside the same
 	// serialized database update.
@@ -169,7 +103,8 @@ export async function POST({ request, locals }) {
 			email,
 			date,
 			results,
-			createdAt: new Date().toISOString()
+			createdAt: new Date().toISOString(),
+			updatedAt: null
 		};
 
 		db.attempts.push(attempt);

@@ -5,7 +5,7 @@
 	import PfaScoreCards from '#lib/PfaScoreCards.svelte';
 	import { enhance, applyAction } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { formatDate, todayISO } from '#lib/events.js';
+	import { EVENTS, formatDate, todayISO } from '#lib/events.js';
 
 	let { data, form } = $props();
 
@@ -773,6 +773,61 @@
 <!-- Announcement Management -->
 <AnnouncementManager announcements={data.announcements ?? []} />
 
+<!-- Record a cadet PFA assessment -->
+<form class="card stack" method="POST" action="?/recordAttempt">
+	<p class="section-label">Record a cadet PFA</p>
+
+	<p class="muted small">
+		Use this when you score a cadet during an official assessment.
+		The result is saved to the cadet's own progress history.
+	</p>
+
+	<div class="field">
+		<label for="pfa-cadet">Cadet</label>
+
+		<select id="pfa-cadet" name="email" required>
+			<option value="">Select a cadet</option>
+
+			{#each data.attendanceRoster ?? [] as cadet (cadet.email)}
+				<option value={cadet.email}>
+					{cadet.name || cadet.email}
+				</option>
+			{/each}
+		</select>
+	</div>
+
+	<div class="field">
+		<label for="pfa-date">Date</label>
+
+		<input
+			id="pfa-date"
+			name="date"
+			type="date"
+			value={today}
+			max={today}
+			required
+		/>
+	</div>
+
+	{#each EVENTS as e}
+		<div class="field">
+			<label for="pfa-{e.id}">
+				{e.label} ({e.kind === 'time' ? 'm:ss' : 'reps'})
+			</label>
+
+			<input
+				id="pfa-{e.id}"
+				name={e.id}
+				inputmode={e.kind === 'time' ? 'text' : 'numeric'}
+				placeholder={e.id === 'run' ? '12:10' : '39'}
+				required
+			/>
+		</div>
+	{/each}
+
+	<button class="btn" type="submit">Save cadet assessment</button>
+</form>
+
 <!-- Responsive Cadet PFA Scores -->
 <PfaScoreCards roster={data.roster ?? []} />
 
@@ -921,7 +976,8 @@
 		flex-shrink: 0;
 	}
 
-	#attendance-session {
+	#attendance-session,
+	#pfa-cadet {
 		width: 100%;
 		min-width: 0;
 	}

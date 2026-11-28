@@ -1,10 +1,14 @@
 
 import { error, json } from '@sveltejs/kit';
 import { getDb, update } from '#lib/server/db.js';
+import {
+	ATTENDANCE_EARLY_MINUTES,
+	ATTENDANCE_LATE_MINUTES
+} from '#lib/events.js';
 
 // Attendance check-in window.
-const EARLY_MINUTES = 15;
-const LATE_MINUTES = 120;
+const EARLY_MINUTES = ATTENDANCE_EARLY_MINUTES;
+const LATE_MINUTES = ATTENDANCE_LATE_MINUTES;
 
 // Require an authenticated cadet.
 function requireCadet(locals) {

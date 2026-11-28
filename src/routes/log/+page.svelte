@@ -19,11 +19,15 @@
 	let note = $state('');
 	let error = $state('');
 	let saved = $state(false);
+	let saving = $state(false);
 
 	const fields = $derived(activityById(activity).fields);
 
-	function save(e) {
+	async function save(e) {
 		e.preventDefault();
+
+		if (saving || store.savingWorkout) return;
+
 		error = '';
 		const workout = { date, activity, effort, note: note.trim() };
 
@@ -43,14 +47,39 @@
 			workout.reps = r;
 		}
 
-		store.addWorkout(workout);
-		distance = time = reps = note = '';
-		saved = true;
-		setTimeout(() => (saved = false), 2000);
+		saving = true;
+
+		try {
+			const ok = await store.submitWorkout(workout);
+
+			if (!ok) {
+				error =
+					store.workoutError ||
+					'Unable to save the workout.';
+				return;
+			}
+
+			distance = time = reps = note = '';
+			saved = true;
+			setTimeout(() => (saved = false), 2000);
+
+		} catch (err) {
+			error =
+				err instanceof Error
+					? err.message
+					: 'Unable to save the workout.';
+
+		} finally {
+			saving = false;
+		}
 	}
 </script>
 
 <h1>Log workout</h1>
+
+{#if store.isCadet && store.workoutError}
+	<p class="error" role="alert">{store.workoutError}</p>
+{/if}
 
 <form class="card stack" onsubmit={save}>
 	<fieldset class="field">
@@ -113,7 +142,13 @@
 
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 
-	<button class="btn" type="submit">{saved ? 'Saved ✓' : 'Save workout'}</button>
+	<button class="btn" type="submit" disabled={saving || store.savingWorkout}>
+		{saving || store.savingWorkout
+			? 'Saving...'
+			: saved
+				? 'Saved ✓'
+				: 'Save workout'}
+	</button>
 </form>
 
 <section class="card stack">
@@ -123,17 +158,35 @@
 	{:else}
 		<ul>
 			{#each store.workouts.slice(0, 8) as w (w.id)}
-				<li class="row">
-					<span class="muted date">{formatDate(w.date)}</span>
-					<span class="grow">{workoutLabel(w)}</span>
-					<span class="value">{workoutValue(w)}</span>
-					<button
-						class="del"
-						aria-label="Delete {workoutLabel(w)} on {formatDate(w.date)}"
-						onclick={() => store.deleteWorkout(w.id)}
-					>
-						&times;
-					</button>
+				<li class="workout">
+					<div class="row">
+						<span class="muted date">{formatDate(w.date)}</span>
+						<span class="grow">{workoutLabel(w)}</span>
+						<span class="value">{workoutValue(w)}</span>
+						<button
+							class="del"
+							aria-label="Delete {workoutLabel(w)} on {formatDate(w.date)}"
+							onclick={() => store.deleteWorkout(w.id)}
+						>
+							&times;
+						</button>
+					</div>
+
+					{#if w.effort || w.note}
+						<p class="muted meta">
+							{#if w.effort}
+								<span>Effort {w.effort}/5</span>
+							{/if}
+
+							{#if w.effort && w.note}
+								<span> · </span>
+							{/if}
+
+							{#if w.note}
+								<span>{w.note}</span>
+							{/if}
+						</p>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -151,6 +204,24 @@
 
 	li {
 		min-height: var(--touch-target);
+	}
+
+	.workout {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		padding: var(--space-1) 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.workout:last-child {
+		border-bottom: 0;
+	}
+
+	.meta {
+		padding-left: 3.5rem;
+		font-size: 0.8rem;
+		overflow-wrap: anywhere;
 	}
 
 	.date {
