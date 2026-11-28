@@ -1,3 +1,4 @@
+
 <script>
 	import { store } from '#lib/store.svelte.js';
 	import {
@@ -32,11 +33,13 @@
 			if (!(d > 0)) return (error = 'Enter a distance in miles.');
 			workout.distance = d;
 		}
+
 		if (fields.includes('time')) {
 			const seconds = parseTime(time);
 			if (!seconds) return (error = 'Enter time as m:ss, like 18:45.');
 			workout.seconds = seconds;
 		}
+
 		if (fields.includes('reps')) {
 			const r = Number(reps);
 			if (!(Number.isInteger(r) && r > 0)) return (error = 'Enter the number of reps.');
@@ -50,8 +53,13 @@
 	}
 </script>
 
-<h1>Log workout</h1>
+<!-- Page Header -->
+<div class="page-header">
+	<h1>Log Workout</h1>
+	<p>Record your workouts, track your effort, and keep a history of your training.</p>
+</div>
 
+<!-- Workout Form -->
 <form class="card stack" onsubmit={save}>
 	<fieldset class="field">
 		<legend>Activity</legend>
@@ -99,7 +107,12 @@
 		<legend>Effort (1 to 5)</legend>
 		<div class="chips">
 			{#each [1, 2, 3, 4, 5] as n}
-				<button type="button" class="chip" aria-pressed={effort === n} onclick={() => (effort = n)}>
+				<button
+					type="button"
+					class="chip"
+					aria-pressed={effort === n}
+					onclick={() => (effort = n)}
+				>
 					{n}
 				</button>
 			{/each}
@@ -108,16 +121,27 @@
 
 	<div class="field">
 		<label for="note">Note</label>
-		<textarea id="note" rows="2" placeholder="Felt strong today." bind:value={note}></textarea>
+		<textarea
+			id="note"
+			rows="2"
+			placeholder="Felt strong today."
+			bind:value={note}
+		></textarea>
 	</div>
 
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if error}
+		<p class="error" role="alert">{error}</p>
+	{/if}
 
-	<button class="btn" type="submit">{saved ? 'Saved ✓' : 'Save workout'}</button>
+	<button class="btn" type="submit">
+		{saved ? 'Saved ✓' : 'Save workout'}
+	</button>
 </form>
 
+<!-- Recent Workouts -->
 <section class="card stack">
 	<p class="section-label">Recent workouts</p>
+
 	{#if store.workouts.length === 0}
 		<p class="muted">No workouts logged yet.</p>
 	{:else}
@@ -127,6 +151,7 @@
 					<span class="muted date">{formatDate(w.date)}</span>
 					<span class="grow">{workoutLabel(w)}</span>
 					<span class="value">{workoutValue(w)}</span>
+
 					<button
 						class="del"
 						aria-label="Delete {workoutLabel(w)} on {formatDate(w.date)}"
@@ -141,6 +166,28 @@
 </section>
 
 <style>
+	/* Page Header */
+
+	.page-header {
+		background: #17365d;
+		padding: 32px;
+		border-radius: 12px;
+		margin-bottom: 24px;
+	}
+
+	.page-header h1 {
+		color: #ffffff;
+		margin: 0 0 12px;
+		font-family: var(--font-display);
+	}
+
+	.page-header p {
+		color: #c5d8f0;
+		margin: 0;
+	}
+
+	/* Recent Workouts */
+
 	ul {
 		margin: 0;
 		padding: 0;
