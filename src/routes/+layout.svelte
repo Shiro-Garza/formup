@@ -1,4 +1,3 @@
-
 <script>
 	import '#lib/theme.css';
 	import '#lib/base.css';
@@ -6,6 +5,7 @@
 	import { page } from '$app/state';
 	import { onMount, untrack } from 'svelte';
 	import { store } from '#lib/store.svelte.js';
+	import '@fortawesome/fontawesome-free/css/all.min.css';
 
 	let { children, data } = $props();
 
@@ -87,12 +87,12 @@
 
 	// Navigation and administrator access.
 	const tabs = $derived([
-		{ href: '/', label: 'Home' },
-		{ href: '/log', label: 'Log' },
-		{ href: '/progress', label: 'Progress' },
-		{ href: '/schedule', label: 'Schedule' },
+		{ href: '/', label: 'Home', icon: 'fa-solid fa-house' },
+		{ href: '/log', label: 'Log', icon: 'fa-solid fa-pen-to-square' },
+		{ href: '/progress', label: 'Progress', icon: 'fa-solid fa-chart-line' },
+		{ href: '/schedule', label: 'Schedule', icon: 'fa-solid fa-calendar-days' },
 		...(data.user?.role === 'admin'
-			? [{ href: '/admin', label: 'Admin' }]
+			? [{ href: '/admin', label: 'Admin', icon: 'fa-solid fa-shield-halved' }]
 			: [])
 	]);
 </script>
@@ -191,7 +191,8 @@
 						? 'page'
 						: undefined}
 				>
-					{tab.label}
+					<i class={tab.icon} aria-hidden="true"></i>
+					<span>{tab.label}</span>
 				</a>
 			{/each}
 		</div>
@@ -283,13 +284,20 @@
 
 	.tab {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		gap: 0.25rem;
 		min-height: var(--touch-target);
 		min-width: 0;
 		color: var(--color-text-muted);
+		font-size: 0.75rem;
 		font-weight: 500;
 		text-align: center;
+	}
+
+	.tab i {
+		font-size: 1.125rem;
 	}
 
 	.tab[aria-current='page'] {
@@ -305,7 +313,11 @@
 
 	@media (max-width: 400px) {
 		.tab {
-			font-size: 0.8rem;
+			font-size: 0.7rem;
+		}
+
+		.tab i {
+			font-size: 1rem;
 		}
 	}
 
