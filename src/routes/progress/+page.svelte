@@ -1,3 +1,4 @@
+
 <script>
 	import { store } from '#lib/store.svelte.js';
 	import Chart from '#lib/Chart.svelte';
@@ -420,7 +421,13 @@
 	}
 </script>
 
-<h1>Progress</h1>
+<!-- Page Header -->
+<div class="page-header">
+	<h1>Progress</h1>
+	<p>
+		Track your fitness performance, assessment scores, and improvement over time.
+	</p>
+</div>
 
 <!-- Server synchronization feedback -->
 {#if isCadet}
@@ -979,6 +986,26 @@
 {/if}
 
 <style>
+	/* Page Header */
+
+	.page-header {
+		background: #17365d;
+		padding: 32px;
+		border-radius: 12px;
+		margin-bottom: 24px;
+	}
+
+	.page-header h1 {
+		color: #ffffff;
+		margin: 0 0 12px;
+		font-family: var(--font-display);
+	}
+
+	.page-header p {
+		color: #c5d8f0;
+		margin: 0;
+	}
+
 	/* Synchronization status */
 
 	.sync-panel {

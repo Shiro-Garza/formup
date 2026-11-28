@@ -1,3 +1,4 @@
+
 <script>
 	import {
 		formatDate,
@@ -33,11 +34,10 @@
 	}
 </script>
 
-<h1>PT Schedule</h1>
-
-<p class="muted">
-	View your upcoming physical training sessions.
-</p>
+<div class="page-header">
+	<h1>PT Schedule</h1>
+	<p>View your upcoming physical training sessions.</p>
+</div>
 
 {#if next}
 	<section class="card stack">
@@ -122,6 +122,25 @@
 </section>
 
 <style>
+	/* Page Header */
+	.page-header {
+		background: #17365d;
+		padding: 32px;
+		border-radius: 12px;
+		margin-bottom: 24px;
+	}
+
+	.page-header h1 {
+		color: #ffffff;
+		margin: 0 0 12px;
+		font-family: var(--font-display);
+	}
+
+	.page-header p {
+		color: #c5d8f0;
+		margin: 0;
+	}
+
 	.session-title {
 		color: var(--color-accent);
 	}
